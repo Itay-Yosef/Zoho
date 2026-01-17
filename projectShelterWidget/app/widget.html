@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>trying</title>
+
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
+
+    <style>
+      :root {
+        --app-bg: rgb(245, 246, 247);
+        --white: #ffffff;
+
+        --text: #111827;
+        --muted: #6b7280;
+
+        --line: #d7dde7;
+        --line-strong: #c7d0df;
+
+        --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+
+        /* sizes */
+        --card-w: 230px;
+        --card-h: 228px;
+        --grid-gap: 12px;
+        --zone-pad-x: 28px;
+        --floor-col: 120px;
+
+        /* headers shades */
+        --hdr-bg: #eef1f5;
+        --floor-bg: #e8edf3;
+        --corner-bg: #e8edf3;
+
+        /* ==== ObjectStatus colors ==== */
+        --st-done: #22c55e; /* הודבק תווית */
+        --st-done-defect: #f59e0b; /* הודבק תווית + קיים ליקוי */
+        --st-defect: #fb7185; /* קיים ליקוי */
+        --st-notdone: #d1d5db; /* לא בוצע */
+        --st-unknown: #cbd5e1;
+
+        /* corner controls */
+        --corner-diagonal-angle: 155deg;
+        --corner-entrance-top: 8px;
+        --corner-entrance-right: 75px;
+        --corner-entrance-translate-x: 0px;
+        --corner-entrance-translate-y: 0px;
+        --corner-floor-bottom: 8px;
+        --corner-floor-right: 15px;
+        --corner-floor-translate-x: 0px;
+        --corner-floor-translate-y: 0px;
+
+        /* icons layout (גודל אייקון נשאר) */
+        --obj-cell: 16px;
+        --obj-row-gap: 5px;
+        --obj-col-gap: 8px;
+        --obj-cnt-w: 22px;
+        --obj-col-w: 44px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        font-family: Arial, system-ui, -apple-system, "Segoe UI", Roboto,
+          sans-serif;
+        background: var(--app-bg);
+        color: var(--text);
+        overflow: hidden;
+      }
+
+      #app {
+        height: 100%;
+        width: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--white);
+        border-bottom: 1px solid var(--line);
+        padding: 10px 12px;
+
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .title {
+        margin: 0;
+        text-align: center;
+        font-weight: 900;
+        font-size: 26px;
+      }
+
+      .legend {
+        justify-self: start;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 800;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .sq {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        display: inline-block;
+      }
+      .sq.st-done {
+        background: var(--st-done);
+      }
+      .sq.st-done-defect {
+        background: var(--st-done-defect);
+      }
+      .sq.st-defect {
+        background: var(--st-defect);
+      }
+      .sq.st-notdone {
+        background: var(--st-notdone);
+      }
+
+      .topbar-spacer {
+        justify-self: end;
+      }
+
+      .matrix-scroll {
+        overflow: auto;
+        min-width: 0;
+        min-height: 0;
+        background: var(--app-bg);
+        padding: 0;
+      }
+
+      .error {
+        display: none;
+        margin: 0;
+        padding: 10px 12px;
+        font-weight: 900;
+        color: #b42318;
+        background: #fff5f5;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .state {
+        margin: 0;
+        padding: 12px;
+        text-align: center;
+        font-weight: 800;
+        color: var(--muted);
+        background: #fff;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .matrix-center {
+        min-width: 100%;
+        display: block;
+        padding-top: 0;
+      }
+
+      table.matrix {
+        border-collapse: separate;
+        border-spacing: 0;
+        direction: rtl;
+        min-width: 100%;
+        width: fit-content;
+        background: transparent;
+      }
+
+      .matrix th,
+      .matrix td {
+        border-left: 1px solid var(--line);
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+        background: transparent;
+      }
+
+      .matrix thead th {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--hdr-bg);
+        font-weight: 900;
+        font-size: 14px;
+        text-align: center;
+        padding: 10px 12px;
+        border-top: none;
+        white-space: nowrap;
+        border-bottom: 1px solid var(--line) !important;
+      }
+
+      .matrix thead th.corner {
+        position: sticky;
+        top: 0;
+        right: 0;
+        z-index: 30;
+        width: var(--floor-col);
+        min-width: var(--floor-col);
+        padding: 0;
+        background: var(--corner-bg);
+        border-bottom: 1px solid var(--line) !important;
+      }
+
+      .cornerDiag {
+        position: relative;
+        min-height: 56px;
+        width: 100%;
+        background: var(--corner-bg);
+      }
+
+      .cornerDiag::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          var(--corner-diagonal-angle),
+          transparent 49.3%,
+          rgba(0, 0, 0, 0.22) 50%,
+          transparent 50.7%
+        );
+        pointer-events: none;
+      }
+
+      .cornerLabel {
+        font-weight: 900;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .cornerEntrance {
+        position: absolute;
+        top: var(--corner-entrance-top);
+        right: var(--corner-entrance-right);
+        transform: translate(
+          var(--corner-entrance-translate-x),
+          var(--corner-entrance-translate-y)
+        );
+      }
+
+      .cornerFloor {
+        position: absolute;
+        bottom: var(--corner-floor-bottom);
+        right: var(--corner-floor-right);
+        transform: translate(
+          var(--corner-floor-translate-x),
+          var(--corner-floor-translate-y)
+        );
+      }
+
+      /* ===== Floor sticky column ===== */
+      .matrix tbody th.floor {
+        position: sticky;
+        right: 0;
+        z-index: 10;
+        background: var(--floor-bg) !important;
+        width: var(--floor-col);
+        min-width: var(--floor-col);
+        padding: 0;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--line) !important;
+      }
+
+      /* ✅ חשוב: שהקומה תמתח לגובה כל השורה */
+      .matrix tbody th.floor {
+        height: auto;
+      }
+      .matrix tbody tr {
+        height: auto;
+      }
+      .matrix tbody th.floor .floorBox {
+        height: 100%;
+      }
+
+      .floorBox {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 10px;
+        font-weight: 900;
+        font-size: 18px;
+      }
+
+      .zone {
+        padding: 14px;
+      }
+
+      .mamad-grid {
+        display: grid;
+        gap: var(--grid-gap);
+        justify-content: center;
+        align-content: start;
+        grid-auto-rows: var(--card-h);
+      }
+
+      .mamad-card {
+        width: var(--card-w);
+        height: var(--card-h);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
+        display: grid;
+        grid-template-rows: 44px 66px 1fr;
+        cursor: pointer;
+        user-select: none;
+      }
+      .mamad-card:hover {
+        box-shadow: 0 2px 10px rgba(16, 24, 40, 0.08);
+      }
+      .mamad-card:active {
+        transform: translateY(1px);
+      }
+
+      .mamad-top {
+        position: relative;
+        padding: 8px 32px;
+        font-weight: 900;
+        font-size: 14px;
+        text-align: center;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        place-items: center;
+      }
+
+      .remarksWrap {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 2;
+      }
+      .remarksWrap:hover .remarksTip {
+        display: block;
+      }
+      .remarksBadge {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: #fb7185;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        display: grid;
+        place-items: center;
+        line-height: 1;
+        cursor: default;
+      }
+      .remarksBadge::before {
+        content: "!";
+        font-weight: 1000;
+        font-size: 12px;
+        color: #ffffff;
+        transform: translateY(-0.5px);
+        display: block;
+      }
+      .remarksTip {
+        position: absolute;
+        top: 20px;
+        right: 0;
+        max-width: 260px;
+        background: #111827;
+        color: #fff;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: pre-wrap;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
+        display: none;
+      }
+
+      .mamad-mid {
+        padding: 10px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .needNone {
+        font-weight: 900;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-weight: 900;
+        font-size: 12px;
+        background: #fff;
+        white-space: nowrap;
+        color: var(--text);
+        min-width: 88px;
+      }
+
+      .statusDot {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 2px solid var(--line-strong);
+        display: inline-block;
+        flex: 0 0 auto;
+        background: #fff;
+      }
+      .statusDot.on {
+        border-color: #16a34a;
+        background: #eafff1;
+        position: relative;
+      }
+      .statusDot.on::after {
+        content: "✓";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 900;
+        color: #166534;
+        line-height: 1;
+      }
+
+      /* ✅ פה התיקון: icons באמצע אנכית */
+      .mamad-bottom {
+        padding: 10px 10px;
+        background: #fafbfc;
+        display: flex;
+        align-items: center; /* ✅ middle */
+        justify-content: flex-start; /* ✅ start ב-RTL = ימין */
+        direction: rtl;
+      }
+
+      .objEmpty {
+        width: 100%;
+        font-weight: 900;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+        align-self: center; /* ✅ middle */
+      }
+
+      .objMatrix {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, var(--obj-col-w));
+        column-gap: var(--obj-col-gap);
+        justify-content: start;
+        align-items: center; /* ✅ middle */
+      }
+
+      .objCol {
+        width: var(--obj-col-w);
+        display: grid;
+        row-gap: var(--obj-row-gap);
+        justify-items: center;
+        align-content: center; /* ✅ middle */
+      }
+
+      .objRow {
+        direction: ltr;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: var(--obj-cell);
+      }
+
+      .objCnt {
+        width: var(--obj-cnt-w);
+        text-align: left;
+        font-size: 13px;
+        font-weight: 900;
+        color: #111;
+        line-height: 1;
+      }
+
+      .objIcon {
+        width: var(--obj-cell);
+        height: var(--obj-cell);
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        display: grid;
+        place-items: center;
+      }
+
+      .objIcon svg {
+        width: calc(var(--obj-cell) - 2px);
+        height: calc(var(--obj-cell) - 2px);
+        stroke: #111;
+        fill: none;
+        stroke-width: 2;
+      }
+
+      .objIcon.st-done {
+        background: var(--st-done);
+      }
+      .objIcon.st-done-defect {
+        background: var(--st-done-defect);
+      }
+      .objIcon.st-defect {
+        background: var(--st-defect);
+      }
+      .objIcon.st-notdone {
+        background: var(--st-notdone);
+      }
+      .objIcon.st-unknown {
+        background: var(--st-unknown);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="topbar">
+        <div class="legend" aria-label="מקרא">
+          <div class="legend-item">
+            <span class="sq st-done"></span><span>הודבק תווית</span>
+          </div>
+          <div class="legend-item">
+            <span class="sq st-done-defect"></span
+            ><span>הודבק תווית + קיים ליקוי</span>
+          </div>
+          <div class="legend-item">
+            <span class="sq st-defect"></span><span>קיים ליקוי</span>
+          </div>
+          <div class="legend-item">
+            <span class="sq st-notdone"></span><span>לא בוצע</span>
+          </div>
+        </div>
+
+        <h1 class="title">ממדים של הפרויקט</h1>
+        <div class="topbar-spacer"></div>
+      </div>
+
+      <div class="matrix-scroll">
+        <div id="error" class="error"></div>
+        <div id="state" class="state">טוען נתונים…</div>
+        <div id="layoutHost" class="matrix-center" style="display: none"></div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

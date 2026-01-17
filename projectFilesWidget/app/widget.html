@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>מסמכים מקושרים</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
+
+    <style>
+      /* ===== Arial everywhere ===== */
+      html,
+      body,
+      button,
+      input,
+      select,
+      textarea,
+      table,
+      th,
+      td,
+      a,
+      span,
+      div {
+        font-family: Arial, sans-serif !important;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        background: transparent;
+      }
+
+      body {
+        overflow: hidden; /* scroll inside table area */
+      }
+
+      .widget {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+      }
+
+      /* ===== Top Bar (NO border-bottom) ===== */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background: #ffffff;
+
+        padding: 0; /* no side padding */
+        min-height: 46px;
+
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        direction: rtl;
+        border-bottom: none; /* IMPORTANT */
+      }
+
+      .right-block {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding-right: 12px;
+      }
+
+      .breadcrumbs {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        direction: rtl;
+        flex-wrap: wrap;
+        min-width: 0;
+
+        min-height: 28px;
+        line-height: 28px;
+
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .crumb,
+      .sep {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        line-height: 28px;
+      }
+
+      .crumb.root {
+        width: 28px;
+        height: 28px;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .crumb.root img.root-folder-icon {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+
+      .crumb {
+        color: #a3a3a3;
+        cursor: pointer;
+        white-space: nowrap;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .crumb:hover {
+        text-decoration: underline;
+      }
+
+      .crumb.root:hover {
+        text-decoration: none;
+      }
+
+      .crumb.current {
+        color: #111;
+        cursor: default;
+        text-decoration: none;
+      }
+
+      .sep {
+        color: #c2c7cf;
+        font-weight: 900;
+        user-select: none;
+      }
+
+      .actions {
+        margin-right: auto; /* RTL pushes actions to LEFT */
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-left: 12px;
+      }
+
+      .btn {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 800;
+        background: #0b66c3;
+        color: #fff;
+        user-select: none;
+      }
+
+      .btn:hover {
+        filter: brightness(0.95);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      #file-upload {
+        display: none;
+      }
+
+      /* (fallback only) - אם ZDK לא זמין */
+      .message {
+        display: none;
+        padding: 8px 12px;
+        font-weight: 800;
+        background: #e9f6ee;
+        color: #0f5132;
+        border-bottom: 1px solid #e9ebee;
+      }
+      .message.error {
+        background: #fdebec;
+        color: #842029;
+      }
+
+      .table-wrap {
+        flex: 1 1 auto;
+        overflow: auto;
+        background: #ffffff;
+      }
+
+      table {
+        width: 100%;
+        min-width: 560px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        direction: rtl;
+      }
+
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: #ffffff;
+
+        padding: 10px 12px;
+        font-weight: 800;
+        color: #111;
+        text-align: right;
+        border-bottom: 1px solid #e9ebee;
+      }
+
+      tbody td {
+        background: #ffffff;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e9ebee;
+        font-weight: 700;
+        color: #111;
+        text-align: right;
+        vertical-align: middle;
+      }
+
+      tbody tr:hover td {
+        background: #f5f6f7;
+      }
+
+      .file-name {
+        display: flex;
+        direction: rtl;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 10px;
+        cursor: pointer;
+        color: #0b66c3;
+        min-width: 0;
+      }
+
+      .file-name:hover {
+        text-decoration: underline;
+      }
+
+      .file-icon {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .file-icon-img {
+        width: 20px;
+        height: 20px;
+        display: block;
+      }
+
+      .file-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .empty-state {
+        padding: 46px 12px;
+        text-align: center;
+        color: #666;
+        font-weight: 800;
+        background: #ffffff;
+        display: none;
+      }
+
+      /* ===== Skeleton Loading ===== */
+      .skel {
+        position: relative;
+        overflow: hidden;
+        background: #eef0f3;
+        border-radius: 8px;
+      }
+      .skel::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -160px;
+        height: 100%;
+        width: 160px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.65) 50%,
+          rgba(255, 255, 255, 0) 100%
+        );
+        animation: shimmer 1.1s infinite;
+      }
+      @keyframes shimmer {
+        0% {
+          transform: translateX(0);
+        }
+        100% {
+          transform: translateX(520px);
+        }
+      }
+
+      .skel-icon {
+        width: 20px;
+        height: 20px;
+      }
+      .skel-name {
+        height: 12px;
+        width: 60%;
+      }
+      .skel-type {
+        height: 12px;
+        width: 50px;
+      }
+      .skel-date {
+        height: 12px;
+        width: 140px;
+      }
+
+      .skel-name-wrap {
+        display: flex;
+        direction: rtl;
+        align-items: center;
+        gap: 10px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="widget">
+      <div class="topbar">
+        <div class="right-block">
+          <div class="breadcrumbs" id="breadcrumbs"></div>
+        </div>
+
+        <div class="actions">
+          <input type="file" id="file-upload" multiple />
+          <button class="btn" id="btn-upload-files" type="button">
+            העלה קבצים
+          </button>
+        </div>
+      </div>
+
+      <!-- fallback only -->
+      <div class="message" id="message"></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 55%">שם</th>
+              <th style="width: 15%">סוג</th>
+              <th style="width: 30%">תאריך שינוי</th>
+            </tr>
+          </thead>
+          <tbody id="file-listing-body"></tbody>
+        </table>
+
+        <div class="empty-state" id="empty-state"></div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
