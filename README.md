@@ -1,3 +1,2 @@
-=========================================
-This is Multi Doorlock's Zoho repositorie
+This is Multi Doorlock's Zoho repository
 =========================================
