@@ -1,5 +1,2 @@
-<<<<<<< HEAD
-# Zoho
-=======
-# Multi-Doorlock-LTD
->>>>>>> 8ddf22f (Initial commit)
+This is Multi Doorlock's Zoho repository
+=========================================
