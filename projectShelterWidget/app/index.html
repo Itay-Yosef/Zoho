@@ -63,7 +63,7 @@
       }
       html,
       body {
-        height: 100%;
+        min-height: 100%;
       }
 
       body {
@@ -77,14 +77,14 @@
           sans-serif;
         background: var(--app-bg);
         color: var(--text);
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
       }
 
       #app {
-        height: 100%;
+        min-height: 100%;
         width: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr;
+        display: block;
       }
 
       .topbar {
@@ -155,7 +155,8 @@
       }
 
       .matrix-scroll {
-        overflow: auto;
+        overflow-x: auto;
+        overflow-y: visible;
         min-width: 0;
         min-height: 0;
         background: var(--app-bg);
@@ -566,7 +567,7 @@
           </div>
         </div>
 
-        <h1 class="title">ממדים של הפרויקט</h1>
+        <h1 class="title">הממדים</h1>
         <div class="topbar-spacer"></div>
       </div>
 

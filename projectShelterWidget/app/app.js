@@ -691,18 +691,20 @@ function _clamp(n, min, max) {
 }
 
 function calcDesiredWidgetHeight() {
-  const topbar = document.querySelector(".topbar");
+  const app = document.getElementById("app");
+  const body = document.body;
+  const doc = document.documentElement;
   const table = document.querySelector("table.matrix");
 
-  const errH =
-    elError && elError.style.display !== "none" ? elError.offsetHeight : 0;
-  const stateH =
-    elState && elState.style.display !== "none" ? elState.offsetHeight : 0;
+  const raw = Math.max(
+    app ? app.scrollHeight : 0,
+    body ? body.scrollHeight : 0,
+    doc ? doc.scrollHeight : 0,
+    table ? table.offsetHeight : 0,
+    420
+  );
 
-  const tableH = table ? table.offsetHeight : 420;
-
-  const total =
-    (topbar?.offsetHeight || 0) + errH + stateH + tableH + RESIZE_PAD;
+  const total = raw + RESIZE_PAD;
   return _clamp(total, RESIZE_MIN_H, RESIZE_MAX_H);
 }
 
@@ -722,7 +724,10 @@ function scheduleAutoResize() {
 function startAutoResizeObserver() {
   if (_ro) return;
   const target =
-    document.querySelector("table.matrix") || elLayoutHost || document.body;
+    document.getElementById("app") ||
+    document.querySelector("table.matrix") ||
+    elLayoutHost ||
+    document.body;
 
   if ("ResizeObserver" in window) {
     _ro = new ResizeObserver(() => scheduleAutoResize());
