@@ -679,7 +679,7 @@ function getProjectIdFromPageLoad(data) {
  ***********************/
 const RESIZE_WIDTH = 1400;
 const RESIZE_MIN_H = 520;
-const RESIZE_MAX_H = 2200;
+const RESIZE_MAX_H = Number.POSITIVE_INFINITY;
 const RESIZE_PAD = 24;
 
 let _resizeRaf = null;
