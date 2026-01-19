@@ -1,4 +1,4 @@
-﻿/* global ZOHO, zrc, ZDK */
+/* global ZOHO, zrc, ZDK */
 
 let currentRecordId;
 let currentEntity;
