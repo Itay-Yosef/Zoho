@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WorkDrive Files</title>
+    <title>קבצי WorkDrive</title>
 
     <style>
       html,
@@ -61,6 +61,20 @@
       .crumb.current {
         color: #111;
         cursor: default;
+      }
+
+      .crumb.root {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .crumb.root img.root-folder-icon {
+        width: 22px;
+        height: 22px;
+        display: block;
       }
 
       .sep {
@@ -166,6 +180,9 @@
         width: 20px;
         height: 20px;
         flex: 0 0 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .file-icon-img {
         width: 20px;
@@ -284,7 +301,7 @@
         <div class="actions">
           <input type="file" id="file-upload" multiple />
           <button class="btn" id="btn-upload-files" type="button">
-            Upload files 1
+            העלאת קבצים
           </button>
         </div>
       </div>
@@ -295,9 +312,9 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 55%">Name</th>
-              <th style="width: 15%">Type</th>
-              <th style="width: 30%">Last modified</th>
+              <th style="width: 55%">שם</th>
+              <th style="width: 15%">סוג</th>
+              <th style="width: 30%">עודכן לאחרונה</th>
             </tr>
           </thead>
           <tbody id="file-listing-body"></tbody>

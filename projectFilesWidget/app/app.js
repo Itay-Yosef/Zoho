@@ -341,7 +341,7 @@ function renderTable(items) {
   tbody.innerHTML = "";
 
   if (!items || items.length === 0) {
-    showEmptyState("No files in this folder");
+    showEmptyState("אין קבצים בתיקייה הזאת");
     return;
   }
 
@@ -368,7 +368,7 @@ function renderTable(items) {
     const displayName = isFolder ? fullName : stripExt(fullName);
 
     const extOrType = isFolder
-      ? "Folder"
+      ? "תיקייה"
       : attrs.extn || getExt(fullName) || type || "";
 
     const mod = formatILDateFromWorkDrive(attrs);
@@ -434,8 +434,8 @@ async function loadFolder(folderId, isRoot) {
   } catch (e) {
     console.error(e);
     const msg = e?.message || String(e) || "Unknown error";
-    showEmptyState(`Error loading folder items: ${msg}`, true);
-    showMessage(`WorkDrive load error: ${msg}`, true);
+    showEmptyState(`שגיאה בטעינת התיקייה: ${msg}`, true);
+    showMessage(`שגיאת WorkDrive: ${msg}`, true);
   }
 }
 
@@ -470,13 +470,13 @@ async function uploadFiles(fileList) {
     }
 
     if (successCount > 0)
-      showMessage(`Uploaded ${successCount} file(s) successfully`, false);
-    if (failCount > 0) showMessage(`${failCount} file(s) failed`, true);
+      showMessage(`הועלו ${successCount} קבצים בהצלחה`, false);
+    if (failCount > 0) showMessage(`${failCount} קבצים נכשלו`, true);
 
     await loadFolder(currentFolderId, false);
   } catch (e) {
     console.error(e);
-    showMessage("Upload failed", true);
+    showMessage("העלאה נכשלה", true);
   } finally {
     isUploading = false;
   }
@@ -586,7 +586,7 @@ function resolveEntityFromPageLoad(data) {
 function showIdentifierError(text) {
   const msg =
     text ||
-    "Unable to find the record identifier. Open the widget from a record in Zoho CRM.";
+    "לא נמצא מזהה הרשומה. פתחו את הווידג׳ט מתוך עמוד רשומה ב-Zoho CRM.";
   showEmptyState(msg, true);
   showMessage(msg, true);
 }
@@ -681,14 +681,14 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 
     if (!currentRecordId) {
       showIdentifierError(
-        "Could not find the identifier of the current record. Please reopen the widget from a record page.",
+        "לא נמצא מזהה הרשומה הנוכחית. פתחו את הווידג׳ט מתוך עמוד רשומה.",
       );
       return;
     }
 
     if (!currentEntity) {
       showIdentifierError(
-        "Could not determine the module/entity for the current record.",
+        "לא ניתן לקבוע את המודול/יישות עבור הרשומה הנוכחית.",
       );
       return;
     }
@@ -699,24 +699,24 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     } catch (err) {
       console.error("CRM record load failed:", err);
       showLoadError(
-        `Record load failed: ${err?.message || String(err) || "Unknown error"}`,
+        `טעינת הרשומה נכשלה: ${err?.message || String(err) || "שגיאה לא ידועה"}`,
       );
       return;
     }
 
     if (!row) {
-      showLoadError("Record details could not be loaded for this ID.");
+      showLoadError("לא נמצאו פרטי הרשומה עבור מזהה זה.");
       return;
     }
 
     const folderId = getFolderIdFromRecord(row);
     if (!folderId) {
       showEmptyState(
-        "No WorkDrive folder is linked to this record. Add a folder ID field value and reload.",
+        "לא מקושרת תיקיית WorkDrive לרשומה. הזינו מזהה תיקייה ושילחו שוב.",
         true,
       );
       showMessage(
-        "WorkDrive folder is missing on the record. Please set it and reload.",
+        "חסר מזהה תיקיית WorkDrive ברשומה. עדכנו ושילחו שוב.",
         true,
       );
       return;
@@ -729,8 +729,8 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
   } catch (e) {
     console.error("PageLoad error:", e);
     const msg = e?.message || String(e) || "Unknown error";
-    showEmptyState(`Widget load error: ${msg}`, true);
-    showMessage(`Widget load error: ${msg}`, true);
+    showEmptyState(`שגיאה בטעינת הווידג׳ט: ${msg}`, true);
+    showMessage(`שגיאה בטעינת הווידג׳ט: ${msg}`, true);
   }
 });
 
