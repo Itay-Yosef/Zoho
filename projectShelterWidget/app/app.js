@@ -426,10 +426,8 @@ function createObjRow(typeKey, statusCls, count) {
   cnt.className = "objCnt";
   cnt.textContent = `x${count}`;
 
-  const icon = createObjIcon(typeKey, statusCls);
-
   row.appendChild(cnt);
-  row.appendChild(icon);
+  row.appendChild(createObjIcon(typeKey, statusCls));
   return row;
 }
 
