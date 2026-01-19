@@ -172,13 +172,11 @@ function formatILDateFromWorkDrive(attrs) {
 }
 
 /* =========================================================
-   ✅ Zoho CRM Built-in Toast (ZDK.Client.showMessage)
+   Zoho CRM Built-in Toast (ZDK.Client.showMessage)
    ========================================================= */
 function showZohoToast(text, type /* 'success'|'error'|'warning'|'info' */) {
   try {
     if (window.ZDK?.Client?.showMessage) {
-      // ZDK.Client.showMessage(message, { type })
-      // (Returns a Promise; no need to await here)
       ZDK.Client.showMessage(String(text), { type: type || "info" });
       return true;
     }
@@ -188,7 +186,6 @@ function showZohoToast(text, type /* 'success'|'error'|'warning'|'info' */) {
   return false;
 }
 
-/* fallback message bar (רק אם אין ZDK) */
 function showFallbackMessage(text, isError = false) {
   const el = document.getElementById("message");
   if (!el) return;
@@ -199,15 +196,10 @@ function showFallbackMessage(text, isError = false) {
   showFallbackMessage._t = setTimeout(() => (el.style.display = "none"), 3000);
 }
 
-/* wrapper אחד לכל הפרויקט */
 function showMessage(text, isError = false) {
   const type = isError ? "error" : "success";
-
-  // Try Zoho CRM built-in toast first
   const usedToast = showZohoToast(text, type);
   if (usedToast) return;
-
-  // fallback (אם רץ מחוץ ל-CRM / בלי ZDK)
   showFallbackMessage(text, isError);
 }
 
@@ -287,10 +279,10 @@ function renderBreadcrumbs() {
 
   const rootCrumb = document.createElement("span");
   rootCrumb.className = `crumb root${atRoot ? " current" : ""}`;
-  rootCrumb.title = "תיקייה ראשית";
+  rootCrumb.title = "בית";
   rootCrumb.innerHTML = `<img class="root-folder-icon" src="${
     ICON_BASE + ICONS.home
-  }" alt="תיקייה" onerror="this.remove()" />`;
+  }" alt="בית" onerror="this.remove()" />`;
 
   if (!atRoot) {
     rootCrumb.onclick = async () => {
@@ -304,7 +296,7 @@ function renderBreadcrumbs() {
   for (let i = 1; i < breadcrumbStack.length; i++) {
     const sep = document.createElement("span");
     sep.className = "sep";
-    sep.textContent = "›";
+    sep.textContent = "/";
     wrap.appendChild(sep);
 
     const c = breadcrumbStack[i];
@@ -362,7 +354,6 @@ function renderTable(items) {
     return;
   }
 
-  // folders first
   const sorted = [...items].sort((a, b) => {
     const af =
       a?.attributes?.is_folder === true ||
@@ -436,7 +427,6 @@ async function onItemClick(item) {
 async function loadFolder(folderId, isRoot) {
   currentFolderId = folderId;
 
-  // show skeleton immediately
   renderSkeletonRows(7);
 
   try {
@@ -445,7 +435,7 @@ async function loadFolder(folderId, isRoot) {
     if (isRoot && breadcrumbStack.length === 0) {
       const info = await getItemInfo(folderId);
       breadcrumbStack = [
-        { id: folderId, name: info?.attributes?.name || '?x?T?\u0015?T?T?"' },
+        { id: folderId, name: info?.attributes?.name || "תיקייה" },
       ];
     }
 
@@ -507,7 +497,6 @@ async function uploadFiles(fileList) {
 async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
   const fileName = file?.name || "file";
 
-  // same filename validation as his code
   const format = /[`^+\=\[\]{};"\\<>\/]/;
   if (format.test(fileName)) {
     console.error("Invalid file name:", fileName);
@@ -515,7 +504,6 @@ async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
   }
 
   try {
-    // EXACTLY like his upload: Blob + multipart header + formdata content=blob
     const fileBlob = new Blob([file], {
       type: file?.type || "application/octet-stream",
     });
@@ -697,7 +685,7 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 
     workDriveZrc = zrc.createInstance({
       baseUrl: `${apiDomain}/workdrive/api/v1`,
-      connection: "zohoworkdrive", // ⬅️ השארתי כמו אצלך
+      connection: "zohoworkdrive",
     });
 
     wireUploadUI();
@@ -735,7 +723,6 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       return;
     }
 
-    // ⬅️ השארתי כמו אצלך
     const folderId = getFolderIdFromRecord(row);
     if (!folderId) {
       showEmptyState(
@@ -755,8 +742,9 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     await loadFolder(rootFolderId, true);
   } catch (e) {
     console.error("PageLoad error:", e);
-    showEmptyState("שגיאה בטעינה");
-    showMessage("שגיאה בהתחברות ל-Zoho/WorkDrive", true);
+    const msg = e?.message || String(e) || "Unknown error";
+    showEmptyState(`שגיאה בטעינת הווידג׳ט: ${msg}`, true);
+    showMessage(`Widget load error: ${msg}`, true);
   }
 });
 
