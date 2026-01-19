@@ -1,4 +1,4 @@
-/* global ZOHO, zrc, ZDK */
+﻿/* global ZOHO, zrc, ZDK */
 
 let currentRecordId;
 let currentEntity;
@@ -445,7 +445,7 @@ async function loadFolder(folderId, isRoot) {
     if (isRoot && breadcrumbStack.length === 0) {
       const info = await getItemInfo(folderId);
       breadcrumbStack = [
-        { id: folderId, name: info?.attributes?.name || "תיקייה" },
+        { id: folderId, name: info?.attributes?.name || '?x?T?\u0015?T?T?"' },
       ];
     }
 
@@ -453,8 +453,9 @@ async function loadFolder(folderId, isRoot) {
     renderTable(items);
   } catch (e) {
     console.error(e);
-    showEmptyState("שגיאה בטעינת התיקייה");
-    showMessage("משהו השתבש בטעינה", true);
+    const msg = e?.message || String(e) || "Unknown error";
+    showEmptyState(`Error loading folder items: ${msg}`, true);
+    showMessage(`WorkDrive load error: ${msg}`, true);
   }
 }
 
@@ -659,6 +660,8 @@ function getFolderIdFromRecord(rec) {
 async function fetchCrmRecord(entity, recordId) {
   if (!entity || !recordId) return null;
 
+  let lastError = null;
+
   try {
     const res = await ZOHO.CRM.API.getRecord({
       Entity: entity,
@@ -666,8 +669,10 @@ async function fetchCrmRecord(entity, recordId) {
     });
     const row = res?.data?.[0];
     if (row) return row;
+    if (res?.message) lastError = res.message;
   } catch (e) {
     console.error("ZOHO.CRM.API.getRecord failed:", e);
+    lastError = e?.message || String(e);
   }
 
   try {
@@ -675,10 +680,13 @@ async function fetchCrmRecord(entity, recordId) {
     const crmData = await safeParseZrcData(crmResp);
     const row = crmData?.data?.[0];
     if (row) return row;
+    if (crmData?.message) lastError = crmData.message;
   } catch (e) {
     console.error("zrc CRM fallback failed:", e);
+    lastError = e?.message || String(e);
   }
 
+  if (lastError) throw new Error(lastError);
   return null;
 }
 
@@ -711,7 +719,16 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       return;
     }
 
-    const row = await fetchCrmRecord(currentEntity, currentRecordId);
+    let row = null;
+    try {
+      row = await fetchCrmRecord(currentEntity, currentRecordId);
+    } catch (err) {
+      console.error("CRM record load failed:", err);
+      showLoadError(
+        `Record load failed: ${err?.message || String(err) || "Unknown error"}`,
+      );
+      return;
+    }
 
     if (!row) {
       showLoadError("Record details could not be loaded for this ID.");
