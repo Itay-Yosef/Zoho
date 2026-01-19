@@ -615,6 +615,73 @@ function showIdentifierError(text) {
   showMessage(msg, true);
 }
 
+function showLoadError(text) {
+  const msg =
+    text ||
+    "Failed to load data for this record. Please refresh and try again.";
+  showEmptyState(msg, true);
+  showMessage(msg, true);
+}
+
+function getFolderIdFromRecord(rec) {
+  if (!rec || typeof rec !== "object") return null;
+
+  const candidates = [
+    rec.projectFolderId,
+    rec.projectFolderID,
+    rec.ProjectFolderId,
+    rec.project_folder_id,
+    rec.Project_Folder_Id,
+    rec.projectFolder,
+    rec.ProjectFolder,
+    rec.workdriveFolderId,
+    rec.workDriveFolderId,
+    rec.WorkDriveFolderId,
+    rec.workdrive_folder_id,
+    rec.WorkDrive_Folder_Id,
+  ];
+
+  for (const c of candidates) {
+    if (c == null) continue;
+    if (typeof c === "object") {
+      if (c.id) {
+        const s = String(c.id).trim();
+        if (s) return s;
+      }
+      continue;
+    }
+    const s = String(c).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+async function fetchCrmRecord(entity, recordId) {
+  if (!entity || !recordId) return null;
+
+  try {
+    const res = await ZOHO.CRM.API.getRecord({
+      Entity: entity,
+      RecordID: recordId,
+    });
+    const row = res?.data?.[0];
+    if (row) return row;
+  } catch (e) {
+    console.error("ZOHO.CRM.API.getRecord failed:", e);
+  }
+
+  try {
+    const crmResp = await zrc.get(`/crm/v8/${entity}/${recordId}`);
+    const crmData = await safeParseZrcData(crmResp);
+    const row = crmData?.data?.[0];
+    if (row) return row;
+  } catch (e) {
+    console.error("zrc CRM fallback failed:", e);
+  }
+
+  return null;
+}
+
 /* ===== Zoho init ===== */
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
@@ -644,23 +711,24 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       return;
     }
 
-    const crmResp = await zrc.get(
-      `/crm/v8/${currentEntity}/${currentRecordId}`,
-    );
-    const crmData = await safeParseZrcData(crmResp);
-    const row = crmData?.data?.[0];
+    const row = await fetchCrmRecord(currentEntity, currentRecordId);
 
     if (!row) {
-      showIdentifierError(
-        "Record details could not be loaded for the provided identifier.",
-      );
+      showLoadError("Record details could not be loaded for this ID.");
       return;
     }
 
     // ⬅️ השארתי כמו אצלך
-    const folderId = row?.projectFolderId;
+    const folderId = getFolderIdFromRecord(row);
     if (!folderId) {
-      showEmptyState("אין תיקיית WorkDrive מקושרת לרשומה הזאת");
+      showEmptyState(
+        "No WorkDrive folder is linked to this record. Add a folder ID field value and reload.",
+        true,
+      );
+      showMessage(
+        "WorkDrive folder is missing on the record. Please set it and reload.",
+        true,
+      );
       return;
     }
 
