@@ -200,6 +200,17 @@ function showMessage(text, isError = false) {
   showFallbackMessage(text, isError);
 }
 
+function formatError(e) {
+  if (!e) return "Unknown error";
+  if (e.response && e.response.status) {
+    const code = e.response.status;
+    const txt = e.response.statusText || "";
+    return `HTTP ${code} ${txt}`.trim();
+  }
+  if (e.message) return e.message;
+  return String(e);
+}
+
 function logFlow(text, isError = false) {
   const entry = { text: String(text), isError, ts: new Date() };
   flowLog.push(entry);
@@ -699,6 +710,8 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
     const apiDomain = getZohoApiDomainFromHost();
 
+    logFlow("PageLoad התחיל");
+
     workDriveZrc = zrc.createInstance({
       baseUrl: `${apiDomain}/workdrive/api/v1`,
       connection: "zohoworkdrive",
@@ -709,10 +722,15 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     currentRecordId = resolveRecordIdFromPageLoad(data);
     currentEntity = resolveEntityFromPageLoad(data);
 
+    logFlow(
+      `Entity: ${currentEntity || "N/A"}, Record: ${currentRecordId || "N/A"}`
+    );
+
     if (!currentRecordId) {
       showIdentifierError(
         "Could not find the identifier of the current record. Please reopen the widget from a record page.",
       );
+      logFlow("Missing record ID", true);
       return;
     }
 
@@ -720,22 +738,26 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       showIdentifierError(
         "Could not determine the module/entity for the current record.",
       );
+      logFlow("Missing entity/module", true);
       return;
     }
 
     let row = null;
     try {
       row = await fetchCrmRecord(currentEntity, currentRecordId);
+      logFlow("CRM record נטען בהצלחה");
     } catch (err) {
       console.error("CRM record load failed:", err);
       showLoadError(
         `Record load failed: ${err?.message || String(err) || "Unknown error"}`,
       );
+      logFlow(`CRM error: ${formatError(err)}`, true);
       return;
     }
 
     if (!row) {
       showLoadError("Record details could not be loaded for this ID.");
+      logFlow("No CRM row returned", true);
       return;
     }
 
@@ -749,8 +771,11 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
         "WorkDrive folder is missing on the record. Please set it and reload.",
         true,
       );
+      logFlow("Missing WorkDrive folder ID on record", true);
       return;
     }
+
+    logFlow(`Folder ID מה-CRM: ${folderId}`);
 
     rootFolderId = folderId;
     currentFolderId = folderId;
@@ -765,3 +790,4 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 });
 
 ZOHO.embeddedApp.init();
+
