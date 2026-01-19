@@ -167,7 +167,7 @@ function formatILDateFromWorkDrive(attrs) {
 
   const pad = (x) => String(x).padStart(2, "0");
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(
-    d.getHours()
+    d.getHours(),
   )}:${pad(d.getMinutes())}`;
 }
 
@@ -373,7 +373,7 @@ function renderTable(items) {
     if (af !== bf) return af ? -1 : 1;
     return (a?.attributes?.name || "").localeCompare(
       b?.attributes?.name || "",
-      "he"
+      "he",
     );
   });
 
@@ -611,21 +611,8 @@ function showIdentifierError(text) {
   const msg =
     text ||
     "Unable to find the record identifier. Open the widget from a record in Zoho CRM.";
-  setDebugId(null);
   showEmptyState(msg, true);
   showMessage(msg, true);
-}
-
-function setDebugId(value) {
-  const el = document.getElementById("debug-id");
-  if (!el) return;
-  if (value) {
-    el.textContent = `ID: ${value}`;
-    el.style.display = "block";
-  } else {
-    el.textContent = "";
-    el.style.display = "none";
-  }
 }
 
 /* ===== Zoho init ===== */
@@ -645,29 +632,27 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 
     if (!currentRecordId) {
       showIdentifierError(
-        "Could not find the identifier of the current record. Please reopen the widget from a record page."
+        "Could not find the identifier of the current record. Please reopen the widget from a record page.",
       );
       return;
     }
 
     if (!currentEntity) {
       showIdentifierError(
-        "Could not determine the module/entity for the current record."
+        "Could not determine the module/entity for the current record.",
       );
       return;
     }
 
-    setDebugId(currentRecordId);
-
     const crmResp = await zrc.get(
-      `/crm/v8/${currentEntity}/${currentRecordId}`
+      `/crm/v8/${currentEntity}/${currentRecordId}`,
     );
     const crmData = await safeParseZrcData(crmResp);
     const row = crmData?.data?.[0];
 
     if (!row) {
       showIdentifierError(
-        "Record details could not be loaded for the provided identifier."
+        "Record details could not be loaded for the provided identifier.",
       );
       return;
     }
