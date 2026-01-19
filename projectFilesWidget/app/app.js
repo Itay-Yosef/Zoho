@@ -11,6 +11,9 @@ let isUploading = false;
 let flowLog = [];
 const LIST_TIMEOUT_MS = 20000; // allow more time on mobile
 const LIST_RETRIES = 1;
+const isMobileEnv =
+  /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "") ||
+  window.innerWidth < 820;
 
 /* ===== Icons (local assets) ===== */
 const ICON_BASE = "./file-icons/";
@@ -383,7 +386,10 @@ async function listFolderItemsWithTimeout(folderId) {
   });
 
   try {
+    const start = performance.now();
     const res = await Promise.race([listFolderItems(folderId), timeout]);
+    const dur = Math.round(performance.now() - start);
+    logFlow(`WorkDrive list הצליח (${dur}ms)`);
     return res;
   } finally {
     clearTimeout(timer);
@@ -394,7 +400,10 @@ async function listFolderItemsWithRetry(folderId) {
   try {
     return await listFolderItemsWithTimeout(folderId);
   } catch (err) {
-    logFlow(`WorkDrive list error, retrying once: ${formatError(err)}`, true);
+    logFlow(
+      `WorkDrive list error, retrying once (${formatError(err)})`,
+      true
+    );
     // single retry
     return await listFolderItemsWithTimeout(folderId);
   }
@@ -485,7 +494,9 @@ async function loadFolder(folderId, isRoot) {
   currentFolderId = folderId;
 
   renderSkeletonRows(7);
-  logFlow(`טוען תיקייה ${folderId}...`);
+  logFlow(
+    `טוען תיקייה ${folderId}...${isMobileEnv ? " [mobile]" : " [desktop]"}`
+  );
 
   try {
     const items = await listFolderItemsWithRetry(folderId);
@@ -708,10 +719,13 @@ async function fetchCrmRecord(entity, recordId) {
   let lastError = null;
 
   try {
+    const start = performance.now();
     const res = await ZOHO.CRM.API.getRecord({
       Entity: entity,
       RecordID: recordId,
     });
+    const dur = Math.round(performance.now() - start);
+    logFlow(`CRM getRecord OK (${dur}ms)`);
     const row = res?.data?.[0];
     if (row) return row;
     if (res?.message) lastError = res.message;
@@ -721,8 +735,11 @@ async function fetchCrmRecord(entity, recordId) {
   }
 
   try {
+    const start = performance.now();
     const crmResp = await zrc.get(`/crm/v8/${entity}/${recordId}`);
     const crmData = await safeParseZrcData(crmResp);
+    const dur = Math.round(performance.now() - start);
+    logFlow(`zrc CRM fallback OK (${dur}ms)`);
     const row = crmData?.data?.[0];
     if (row) return row;
     if (crmData?.message) lastError = crmData.message;
