@@ -212,18 +212,20 @@ function showMessage(text, isError = false) {
 }
 
 /* ===== UI helpers ===== */
-function showEmptyState(text) {
+function showEmptyState(text, isError = false) {
   const empty = document.getElementById("empty-state");
   const body = document.getElementById("file-listing-body");
   if (!empty || !body) return;
   body.innerHTML = "";
   empty.textContent = text;
+  empty.classList.toggle("error", !!isError);
   empty.style.display = "block";
 }
 
 function hideEmptyState() {
   const empty = document.getElementById("empty-state");
   if (!empty) return;
+  empty.classList.remove("error");
   empty.style.display = "none";
   empty.textContent = "";
 }
@@ -565,6 +567,54 @@ function getZohoApiDomainFromHost() {
   return "https://www.zohoapis.com";
 }
 
+function resolveRecordIdFromPageLoad(data) {
+  if (!data) return null;
+
+  const candidates = [];
+
+  const entityId = data.EntityId;
+  if (Array.isArray(entityId) && entityId.length > 0) {
+    candidates.push(entityId[0]);
+  } else if (entityId !== undefined && entityId !== null) {
+    candidates.push(entityId);
+  }
+
+  if (data.recordId !== undefined && data.recordId !== null) {
+    candidates.push(data.recordId);
+  }
+
+  const found = candidates.find((v) => {
+    const s = String(v ?? "").trim();
+    return !!s;
+  });
+
+  return found ? String(found).trim() : null;
+}
+
+function resolveEntityFromPageLoad(data) {
+  if (!data) return null;
+  const raw = data.Entity ?? data.entity ?? null;
+
+  if (Array.isArray(raw)) {
+    for (const v of raw) {
+      const s = String(v ?? "").trim();
+      if (s) return s;
+    }
+    return null;
+  }
+
+  const s = String(raw ?? "").trim();
+  return s || null;
+}
+
+function showIdentifierError(text) {
+  const msg =
+    text ||
+    "Unable to find the record identifier. Open the widget from a record in Zoho CRM.";
+  showEmptyState(msg, true);
+  showMessage(msg, true);
+}
+
 /* ===== Zoho init ===== */
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
@@ -577,14 +627,35 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 
     wireUploadUI();
 
-    currentRecordId = data.EntityId;
-    currentEntity = data.Entity;
+    currentRecordId = resolveRecordIdFromPageLoad(data);
+    currentEntity = resolveEntityFromPageLoad(data);
+
+    if (!currentRecordId) {
+      showIdentifierError(
+        "Could not find the identifier of the current record. Please reopen the widget from a record page."
+      );
+      return;
+    }
+
+    if (!currentEntity) {
+      showIdentifierError(
+        "Could not determine the module/entity for the current record."
+      );
+      return;
+    }
 
     const crmResp = await zrc.get(
       `/crm/v8/${currentEntity}/${currentRecordId}`
     );
     const crmData = await safeParseZrcData(crmResp);
     const row = crmData?.data?.[0];
+
+    if (!row) {
+      showIdentifierError(
+        "Record details could not be loaded for the provided identifier."
+      );
+      return;
+    }
 
     // ⬅️ השארתי כמו אצלך
     const folderId = row?.projectFolderId;
