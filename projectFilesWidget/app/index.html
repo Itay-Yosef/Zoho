@@ -19,6 +19,27 @@
         overflow: hidden;
       }
 
+      .debug-log {
+        background: #f7f8fa;
+        border-bottom: 1px solid #e9ebee;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #444;
+        line-height: 1.4;
+        max-height: 120px;
+        overflow: auto;
+        direction: rtl;
+      }
+
+      .debug-log .title {
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+
+      .debug-log .item.error {
+        color: #b42318;
+      }
+
       .widget {
         min-height: 100vh;
         height: 100%;
@@ -287,6 +308,10 @@
             Upload files
           </button>
         </div>
+      </div>
+
+      <div class="debug-log" id="debug-log" aria-live="polite">
+        <div class="title">Log</div>
       </div>
 
       <div class="message" id="message"></div>
