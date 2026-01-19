@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>קבצי WorkDrive</title>
+    <title>WorkDrive Files</title>
 
     <style>
       html,
@@ -13,6 +13,27 @@
         padding: 0;
         font-family: Arial, sans-serif;
         background: transparent;
+      }
+
+      .debug-log {
+        background: #f7f8fa;
+        border-bottom: 1px solid #e9ebee;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #444;
+        line-height: 1.4;
+        max-height: 120px;
+        overflow: auto;
+        direction: rtl;
+      }
+
+      .debug-log .title {
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+
+      .debug-log .item.error {
+        color: #b42318;
       }
 
       body {
@@ -61,20 +82,6 @@
       .crumb.current {
         color: #111;
         cursor: default;
-      }
-
-      .crumb.root {
-        width: 28px;
-        height: 28px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .crumb.root img.root-folder-icon {
-        width: 22px;
-        height: 22px;
-        display: block;
       }
 
       .sep {
@@ -180,9 +187,6 @@
         width: 20px;
         height: 20px;
         flex: 0 0 20px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
       }
       .file-icon-img {
         width: 20px;
@@ -301,9 +305,13 @@
         <div class="actions">
           <input type="file" id="file-upload" multiple />
           <button class="btn" id="btn-upload-files" type="button">
-            העלאת קבצים
+            Upload files
           </button>
         </div>
+      </div>
+
+      <div class="debug-log" id="debug-log" aria-live="polite">
+        <div class="title">Log</div>
       </div>
 
       <div class="message" id="message"></div>
@@ -312,9 +320,9 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 55%">שם</th>
-              <th style="width: 15%">סוג</th>
-              <th style="width: 30%">עודכן לאחרונה</th>
+              <th style="width: 55%">Name</th>
+              <th style="width: 15%">Type</th>
+              <th style="width: 30%">Last modified</th>
             </tr>
           </thead>
           <tbody id="file-listing-body"></tbody>
