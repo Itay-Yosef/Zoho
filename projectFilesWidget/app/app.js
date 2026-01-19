@@ -375,15 +375,28 @@ async function getItemInfo(itemId) {
   return data?.data || null;
 }
 
-async function listFolderItems(folderId) {
+async function listFolderItems(folderId, opts = {}) {
+  const headers = { Accept: opts.accept || "application/vnd.api+json" };
+  const params = {};
+
+  // smaller page size to test mobile response; bump if needed
+  params["page[limit]"] = opts.limit || 50;
+
   const resp = await workDriveZrc.get(`/files/${folderId}/files`, {
-    headers: { Accept: "application/vnd.api+json" },
+    headers,
+    params,
   });
+  const status = `${resp?.status || "?"}${resp?.statusText ? " " + resp.statusText : ""}`;
   const data = await safeParseZrcData(resp);
+  if (data?.code) {
+    logFlow(`WorkDrive list response: ${status}, code=${data.code}`);
+  } else {
+    logFlow(`WorkDrive list response: ${status}`);
+  }
   return Array.isArray(data?.data) ? data.data : [];
 }
 
-async function listFolderItemsWithTimeout(folderId) {
+async function listFolderItemsWithTimeout(folderId, opts = {}) {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
@@ -394,7 +407,7 @@ async function listFolderItemsWithTimeout(folderId) {
 
   try {
     const start = performance.now();
-    const res = await Promise.race([listFolderItems(folderId), timeout]);
+    const res = await Promise.race([listFolderItems(folderId, opts), timeout]);
     const dur = Math.round(performance.now() - start);
     logFlow(`רשימת WorkDrive נטענה (${dur}ms)`);
     return res;
@@ -405,13 +418,17 @@ async function listFolderItemsWithTimeout(folderId) {
 
 async function listFolderItemsWithRetry(folderId) {
   try {
-    return await listFolderItemsWithTimeout(folderId);
+    return await listFolderItemsWithTimeout(folderId, { limit: 50 });
   } catch (err) {
     logFlow(
       `WorkDrive list error, retrying once (${formatError(err)})`,
       true,
     );
-    return await listFolderItemsWithTimeout(folderId);
+    // second attempt: looser Accept header in case mobile WebView blocks vnd.api+json
+    return await listFolderItemsWithTimeout(folderId, {
+      limit: 50,
+      accept: "application/json",
+    });
   }
 }
 
@@ -631,6 +648,23 @@ function getZohoApiDomainFromHost() {
   return "https://www.zohoapis.com";
 }
 
+async function logCurrentWorkDriveUser() {
+  if (!workDriveZrc) return;
+  try {
+    const resp = await workDriveZrc.get("/users/me", {
+      headers: { Accept: "application/json" },
+    });
+    const data = (await safeParseZrcData(resp)) || {};
+    const user = data.data || data.user || {};
+    const email = user.email || user.primary_email || user.user_email || "?";
+    const team =
+      user.team_id || user.teamid || user.organization_id || user.orgId || "?";
+    logFlow(`WorkDrive user: ${email}, team/org: ${team}`);
+  } catch (e) {
+    logFlow(`WorkDrive /users/me failed: ${formatError(e)}`, true);
+  }
+}
+
 function resolveRecordIdFromPageLoad(data) {
   if (!data) return null;
 
@@ -770,11 +804,14 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
 
   try {
     const apiDomain = getZohoApiDomainFromHost();
+    logFlow(`API domain: ${apiDomain}`);
 
     workDriveZrc = zrc.createInstance({
       baseUrl: `${apiDomain}/workdrive/api/v1`,
       connection: "zohoworkdrive",
     });
+
+    await logCurrentWorkDriveUser();
 
     wireUploadUI();
 
