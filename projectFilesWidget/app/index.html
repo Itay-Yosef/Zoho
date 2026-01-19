@@ -1,45 +1,22 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>מסמכים מקושרים</title>
-
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
-    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
+    <title>WorkDrive Files</title>
 
     <style>
-      /* ===== Arial everywhere ===== */
-      html,
-      body,
-      button,
-      input,
-      select,
-      textarea,
-      table,
-      th,
-      td,
-      a,
-      span,
-      div {
-        font-family: Arial, sans-serif !important;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
       html,
       body {
         height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
         background: transparent;
       }
 
       body {
-        overflow: hidden; /* scroll inside table area */
+        overflow: hidden;
       }
 
       .widget {
@@ -50,89 +27,40 @@
         background: #ffffff;
       }
 
-      /* ===== Top Bar (NO border-bottom) ===== */
       .topbar {
         position: sticky;
         top: 0;
         z-index: 1000;
         background: #ffffff;
-
-        padding: 0; /* no side padding */
-        min-height: 46px;
-
         display: flex;
         align-items: center;
         gap: 12px;
-
-        direction: rtl;
-        border-bottom: none; /* IMPORTANT */
-      }
-
-      .right-block {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-        padding-right: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e9ebee;
       }
 
       .breadcrumbs {
         display: flex;
         align-items: center;
-        gap: 10px;
-        direction: rtl;
+        gap: 8px;
         flex-wrap: wrap;
         min-width: 0;
-
-        min-height: 28px;
-        line-height: 28px;
-
-        font-size: 18px;
-        font-weight: 800;
-      }
-
-      .crumb,
-      .sep {
-        display: inline-flex;
-        align-items: center;
-        height: 28px;
-        line-height: 28px;
-      }
-
-      .crumb.root {
-        width: 28px;
-        height: 28px;
-        justify-content: center;
-        cursor: pointer;
-      }
-
-      .crumb.root img.root-folder-icon {
-        width: 22px;
-        height: 22px;
-        display: block;
+        font-size: 16px;
+        font-weight: 700;
       }
 
       .crumb {
-        color: #a3a3a3;
+        color: #0b66c3;
         cursor: pointer;
         white-space: nowrap;
-        max-width: 240px;
+        max-width: 220px;
         overflow: hidden;
         text-overflow: ellipsis;
-      }
-
-      .crumb:hover {
-        text-decoration: underline;
-      }
-
-      .crumb.root:hover {
-        text-decoration: none;
       }
 
       .crumb.current {
         color: #111;
         cursor: default;
-        text-decoration: none;
       }
 
       .sep {
@@ -142,29 +70,26 @@
       }
 
       .actions {
-        margin-right: auto; /* RTL pushes actions to LEFT */
+        margin-right: auto;
         display: flex;
         align-items: center;
         gap: 10px;
-        padding-left: 12px;
       }
 
       .btn {
         padding: 8px 12px;
         border: none;
-        border-radius: 10px;
+        border-radius: 8px;
         cursor: pointer;
         font-size: 14px;
-        font-weight: 800;
+        font-weight: 700;
         background: #0b66c3;
         color: #fff;
-        user-select: none;
       }
 
       .btn:hover {
         filter: brightness(0.95);
       }
-
       .btn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
@@ -174,11 +99,10 @@
         display: none;
       }
 
-      /* (fallback only) - אם ZDK לא זמין */
       .message {
         display: none;
         padding: 8px 12px;
-        font-weight: 800;
+        font-weight: 700;
         background: #e9f6ee;
         color: #0f5132;
         border-bottom: 1px solid #e9ebee;
@@ -199,7 +123,6 @@
         width: 100%;
         min-width: 560px;
         border-collapse: collapse;
-        table-layout: fixed;
         direction: rtl;
       }
 
@@ -208,7 +131,6 @@
         top: 0;
         z-index: 50;
         background: #ffffff;
-
         padding: 10px 12px;
         font-weight: 800;
         color: #111;
@@ -234,26 +156,17 @@
         display: flex;
         direction: rtl;
         align-items: center;
-        justify-content: flex-start;
         gap: 10px;
         cursor: pointer;
         color: #0b66c3;
         min-width: 0;
       }
 
-      .file-name:hover {
-        text-decoration: underline;
-      }
-
       .file-icon {
         width: 20px;
         height: 20px;
         flex: 0 0 20px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
       }
-
       .file-icon-img {
         width: 20px;
         height: 20px;
@@ -268,10 +181,10 @@
       }
 
       .empty-state {
-        padding: 46px 12px;
+        padding: 32px 12px;
         text-align: center;
         color: #666;
-        font-weight: 800;
+        font-weight: 700;
         background: #ffffff;
         display: none;
         border: 1px solid transparent;
@@ -290,16 +203,14 @@
         }
         .topbar {
           flex-wrap: wrap;
-          padding: 8px;
           gap: 8px;
         }
         .breadcrumbs {
-          font-size: 16px;
+          font-size: 14px;
         }
         .actions {
           width: 100%;
           justify-content: flex-start;
-          padding-left: 0;
         }
         table {
           min-width: 100%;
@@ -309,12 +220,9 @@
           padding: 8px 10px;
           font-size: 13px;
         }
-        .file-name {
-          gap: 8px;
-        }
       }
 
-      /* ===== Skeleton Loading ===== */
+      /* Skeleton */
       .skel {
         position: relative;
         overflow: hidden;
@@ -344,7 +252,6 @@
           transform: translateX(520px);
         }
       }
-
       .skel-icon {
         width: 20px;
         height: 20px;
@@ -361,7 +268,6 @@
         height: 12px;
         width: 140px;
       }
-
       .skel-name-wrap {
         display: flex;
         direction: rtl;
@@ -374,28 +280,24 @@
   <body>
     <div class="widget">
       <div class="topbar">
-        <div class="right-block">
-          <div class="breadcrumbs" id="breadcrumbs"></div>
-        </div>
-
+        <div class="breadcrumbs" id="breadcrumbs"></div>
         <div class="actions">
           <input type="file" id="file-upload" multiple />
           <button class="btn" id="btn-upload-files" type="button">
-            העלה קבצים
+            Upload files
           </button>
         </div>
       </div>
 
-      <!-- fallback only -->
       <div class="message" id="message"></div>
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th style="width: 55%">שם</th>
-              <th style="width: 15%">סוג</th>
-              <th style="width: 30%">תאריך שינוי</th>
+              <th style="width: 55%">Name</th>
+              <th style="width: 15%">Type</th>
+              <th style="width: 30%">Last modified</th>
             </tr>
           </thead>
           <tbody id="file-listing-body"></tbody>
@@ -405,6 +307,7 @@
       </div>
     </div>
 
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
