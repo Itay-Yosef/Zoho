@@ -1,4 +1,4 @@
-﻿/* global ZOHO, zrc, ZDK */
+/* global ZOHO, zrc, ZDK */
 
 let currentRecordId;
 let currentEntity;
@@ -6,10 +6,11 @@ let currentFolderId;
 let rootFolderId;
 let workDriveZrc;
 
-let breadcrumbStack = []; // [{id, name}]
+let breadcrumbStack = []; // [{ id, name }]
 let isUploading = false;
 let flowLog = [];
-const LIST_TIMEOUT_MS = 20000; // allow more time on mobile
+
+const LIST_TIMEOUT_MS = 20000; // ארוך יותר למובייל
 const LIST_RETRIES = 1;
 const isMobileEnv =
   /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "") ||
@@ -206,20 +207,35 @@ function showMessage(text, isError = false) {
 }
 
 function formatError(e) {
-  if (!e) return "Unknown error";
+  if (!e) return "שגיאה לא ידועה";
+  const parts = [];
   if (e.response && e.response.status) {
     const code = e.response.status;
     const txt = e.response.statusText || "";
-    return `HTTP ${code} ${txt}`.trim();
+    parts.push(`HTTP ${code}${txt ? " " + txt : ""}`);
+    const data = e.response.data || {};
+    if (data.code) parts.push(`code=${data.code}`);
+    if (data.message) parts.push(data.message);
   }
-  if (e.message) return e.message;
-  return String(e);
+  if (e.data && e.data.message) parts.push(e.data.message);
+  if (e.message) parts.push(e.message);
+  if (!parts.length) parts.push(String(e));
+  return parts.filter(Boolean).join(" | ");
+}
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function logFlow(text, isError = false) {
   const entry = { text: String(text), isError, ts: new Date() };
   flowLog.push(entry);
-  if (flowLog.length > 30) flowLog.shift();
+  if (flowLog.length > 80) flowLog.shift();
 
   const box = document.getElementById("debug-log");
   if (!box) return;
@@ -229,13 +245,13 @@ function logFlow(text, isError = false) {
       .map((n) => String(n).padStart(2, "0"))
       .join(":");
 
-  let html = '<div class="title">Log</div>';
+  let html = '<div class="title">לוג</div>';
   flowLog
     .slice()
     .reverse()
     .forEach((e) => {
       html += `<div class="item${e.isError ? " error" : ""}">[${renderTs(
-        e.ts
+        e.ts,
       )}] ${escapeHtml(e.text)}</div>`;
     });
   box.innerHTML = html;
@@ -257,15 +273,6 @@ function hideEmptyState() {
   empty.classList.remove("error");
   empty.style.display = "none";
   empty.textContent = "";
-}
-
-function escapeHtml(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 async function safeParseZrcData(resp) {
@@ -315,10 +322,10 @@ function renderBreadcrumbs() {
 
   const rootCrumb = document.createElement("span");
   rootCrumb.className = `crumb root${atRoot ? " current" : ""}`;
-  rootCrumb.title = "Home";
+  rootCrumb.title = "בית";
   rootCrumb.innerHTML = `<img class="root-folder-icon" src="${
     ICON_BASE + ICONS.home
-  }" alt="Home" onerror="this.remove()" />`;
+  }" alt="בית" onerror="this.remove()" />`;
 
   if (!atRoot) {
     rootCrumb.onclick = async () => {
@@ -340,7 +347,7 @@ function renderBreadcrumbs() {
 
     const crumb = document.createElement("span");
     crumb.className = `crumb${isCurrent ? " current" : ""}`;
-    crumb.textContent = c.name || "Folder";
+    crumb.textContent = c.name || "תיקייה";
     crumb.title = c.name || "";
 
     if (!isCurrent) {
@@ -381,7 +388,7 @@ async function listFolderItemsWithTimeout(folderId) {
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
       () => reject(new Error("WorkDrive list timeout (mobile)")),
-      LIST_TIMEOUT_MS
+      LIST_TIMEOUT_MS,
     );
   });
 
@@ -389,7 +396,7 @@ async function listFolderItemsWithTimeout(folderId) {
     const start = performance.now();
     const res = await Promise.race([listFolderItems(folderId), timeout]);
     const dur = Math.round(performance.now() - start);
-    logFlow(`WorkDrive list הצליח (${dur}ms)`);
+    logFlow(`רשימת WorkDrive נטענה (${dur}ms)`);
     return res;
   } finally {
     clearTimeout(timer);
@@ -402,9 +409,8 @@ async function listFolderItemsWithRetry(folderId) {
   } catch (err) {
     logFlow(
       `WorkDrive list error, retrying once (${formatError(err)})`,
-      true
+      true,
     );
-    // single retry
     return await listFolderItemsWithTimeout(folderId);
   }
 }
@@ -417,7 +423,7 @@ function renderTable(items) {
   tbody.innerHTML = "";
 
   if (!items || items.length === 0) {
-    showEmptyState("No files in this folder");
+    showEmptyState("אין קבצים להצגה");
     return;
   }
 
@@ -444,7 +450,7 @@ function renderTable(items) {
     const displayName = isFolder ? fullName : stripExt(fullName);
 
     const extOrType = isFolder
-      ? "Folder"
+      ? "תיקייה"
       : attrs.extn || getExt(fullName) || type || "";
 
     const mod = formatILDateFromWorkDrive(attrs);
@@ -481,7 +487,7 @@ async function onItemClick(item) {
   const isFolder = attrs.is_folder === true || type === "folder";
 
   if (isFolder) {
-    breadcrumbStack.push({ id: item.id, name: attrs.name || "Folder" });
+    breadcrumbStack.push({ id: item.id, name: attrs.name || "תיקייה" });
     await navigateToFolder(item.id);
     return;
   }
@@ -495,12 +501,12 @@ async function loadFolder(folderId, isRoot) {
 
   renderSkeletonRows(7);
   logFlow(
-    `טוען תיקייה ${folderId}...${isMobileEnv ? " [mobile]" : " [desktop]"}`
+    `טוען תיקייה ${folderId}...${isMobileEnv ? " [mobile]" : " [desktop]"}`,
   );
 
   try {
     const items = await listFolderItemsWithRetry(folderId);
-    logFlow(`נשלפה תיקייה ${folderId} עם ${items.length} פריטים`);
+    logFlow(`רשימת תיקייה ${folderId} נטענה (${items.length} פריטים)`);
 
     if (isRoot && breadcrumbStack.length === 0) {
       const info = await getItemInfo(folderId);
@@ -515,7 +521,7 @@ async function loadFolder(folderId, isRoot) {
     console.error(e);
     const msg = formatError(e);
     logFlow(`WorkDrive error: ${msg}`, true);
-    showEmptyState(`שגיאה בטעינת התיקייה: ${msg}`, true);
+    showEmptyState(`שגיאה בטעינת תיקייה: ${msg}`, true);
     showMessage(`שגיאת WorkDrive: ${msg}`, true);
   }
 }
@@ -550,14 +556,15 @@ async function uploadFiles(fileList) {
       else failCount++;
     }
 
-    if (successCount > 0)
-      showMessage(`Uploaded ${successCount} file(s) successfully`, false);
-    if (failCount > 0) showMessage(`${failCount} file(s) failed`, true);
+    if (successCount > 0) {
+      showMessage(`העלאת ${successCount} קובץ/ים הצליחה`, false);
+    }
+    if (failCount > 0) showMessage(`${failCount} קבצים נכשלו`, true);
 
     await loadFolder(currentFolderId, false);
   } catch (e) {
     console.error(e);
-    showMessage("Upload failed", true);
+    showMessage("העלאה נכשלה", true);
   } finally {
     isUploading = false;
   }
@@ -667,15 +674,13 @@ function resolveEntityFromPageLoad(data) {
 function showIdentifierError(text) {
   const msg =
     text ||
-    "Unable to find the record identifier. Open the widget from a record in Zoho CRM.";
+    "לא נמצא מזהה הרשומה. פתחו את הווידג'ט מדף רשומה וחזרו לנסות.";
   showEmptyState(msg, true);
   showMessage(msg, true);
 }
 
 function showLoadError(text) {
-  const msg =
-    text ||
-    "Failed to load data for this record. Please refresh and try again.";
+  const msg = text || "טעינת הרשומה נכשלה. נסו שוב.";
   showEmptyState(msg, true);
   showMessage(msg, true);
 }
@@ -717,48 +722,54 @@ async function fetchCrmRecord(entity, recordId) {
   if (!entity || !recordId) return null;
 
   let lastError = null;
+  const start = performance.now();
+  logFlow("טוען רשומת CRM...");
 
   try {
-    const start = performance.now();
     const res = await ZOHO.CRM.API.getRecord({
       Entity: entity,
       RecordID: recordId,
     });
-    const dur = Math.round(performance.now() - start);
-    logFlow(`CRM getRecord OK (${dur}ms)`);
     const row = res?.data?.[0];
-    if (row) return row;
+    if (row) {
+      logFlow(`CRM getRecord OK (${Math.round(performance.now() - start)}ms)`);
+      return row;
+    }
     if (res?.message) lastError = res.message;
   } catch (e) {
     console.error("ZOHO.CRM.API.getRecord failed:", e);
     lastError = e?.message || String(e);
+    logFlow(`CRM API error: ${formatError(e)}`, true);
   }
 
   try {
-    const start = performance.now();
     const crmResp = await zrc.get(`/crm/v8/${entity}/${recordId}`);
     const crmData = await safeParseZrcData(crmResp);
-    const dur = Math.round(performance.now() - start);
-    logFlow(`zrc CRM fallback OK (${dur}ms)`);
     const row = crmData?.data?.[0];
-    if (row) return row;
+    if (row) {
+      logFlow(
+        `CRM getRecord fallback OK (${Math.round(
+          performance.now() - start,
+        )}ms)`,
+      );
+      return row;
+    }
     if (crmData?.message) lastError = crmData.message;
   } catch (e) {
     console.error("zrc CRM fallback failed:", e);
     lastError = e?.message || String(e);
+    logFlow(`CRM fallback error: ${formatError(e)}`, true);
   }
 
   if (lastError) throw new Error(lastError);
   return null;
 }
 
-
-
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
+  logFlow("PageLoad התחיל");
+
   try {
     const apiDomain = getZohoApiDomainFromHost();
-
-    logFlow("PageLoad התחיל");
 
     workDriveZrc = zrc.createInstance({
       baseUrl: `${apiDomain}/workdrive/api/v1`,
@@ -770,56 +781,46 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     currentRecordId = resolveRecordIdFromPageLoad(data);
     currentEntity = resolveEntityFromPageLoad(data);
 
-    logFlow(
-      `Entity: ${currentEntity || "N/A"}, Record: ${currentRecordId || "N/A"}`
-    );
-
     if (!currentRecordId) {
-      showIdentifierError(
-        "Could not find the identifier of the current record. Please reopen the widget from a record page.",
-      );
-      logFlow("Missing record ID", true);
+      logFlow("לא נמצא מזהה רשומה", true);
+      showIdentifierError();
       return;
     }
 
     if (!currentEntity) {
-      showIdentifierError(
-        "Could not determine the module/entity for the current record.",
-      );
-      logFlow("Missing entity/module", true);
+      logFlow("לא ניתן לזהות מודול/ישות", true);
+      showIdentifierError("לא ניתן לזהות את המודול של הרשומה.");
       return;
     }
+
+    logFlow(`Entity: ${currentEntity}, Record: ${currentRecordId}`);
 
     let row = null;
     try {
       row = await fetchCrmRecord(currentEntity, currentRecordId);
-      logFlow("CRM record נטען בהצלחה");
     } catch (err) {
       console.error("CRM record load failed:", err);
-      showLoadError(
-        `Record load failed: ${err?.message || String(err) || "Unknown error"}`,
-      );
-      logFlow(`CRM error: ${formatError(err)}`, true);
+      const msg = formatError(err);
+      logFlow(`CRM record load failed: ${msg}`, true);
+      showLoadError(`טעינת רשומה נכשלה: ${msg}`);
       return;
     }
 
     if (!row) {
-      showLoadError("Record details could not be loaded for this ID.");
-      logFlow("No CRM row returned", true);
+      logFlow("פרטי הרשומה לא נטענו", true);
+      showLoadError("פרטי רשומה לא נטענו עבור מזהה זה.");
       return;
     }
 
+    logFlow("CRM record נטען בהצלחה");
+
     const folderId = getFolderIdFromRecord(row);
     if (!folderId) {
-      showEmptyState(
-        "No WorkDrive folder is linked to this record. Add a folder ID field value and reload.",
-        true,
-      );
-      showMessage(
-        "WorkDrive folder is missing on the record. Please set it and reload.",
-        true,
-      );
-      logFlow("Missing WorkDrive folder ID on record", true);
+      const msg =
+        "לא נמצאה תיקיית WorkDrive ברשומה. הוסיפו מזהה תיקייה ושמרו את הרשומה.";
+      logFlow(msg, true);
+      showEmptyState(msg, true);
+      showMessage(msg, true);
       return;
     }
 
@@ -828,13 +829,14 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     rootFolderId = folderId;
     currentFolderId = folderId;
 
+    breadcrumbStack = [];
     await loadFolder(rootFolderId, true);
   } catch (e) {
     console.error("PageLoad error:", e);
-    const msg = e?.message || String(e) || "Unknown error";
-    showEmptyState(`Widget load error: ${msg}` , true);
-    showMessage(`Widget load error: ${msg}` , true);
-    logFlow(`Widget load error: ${formatError(e)}` , true);
+    const msg = formatError(e);
+    logFlow(`שגיאה בטעינת הווידג'ט: ${msg}`, true);
+    showEmptyState(`שגיאה בטעינת הווידג'ט: ${msg}`, true);
+    showMessage(`שגיאה בטעינת הווידג'ט: ${msg}`, true);
   }
 });
 
