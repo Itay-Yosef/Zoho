@@ -9,6 +9,7 @@ let workDriveZrc;
 let breadcrumbStack = []; // [{id, name}]
 let isUploading = false;
 let flowLog = [];
+const LIST_TIMEOUT_MS = 12000;
 
 /* ===== Icons (local assets) ===== */
 const ICON_BASE = "./file-icons/";
@@ -371,6 +372,23 @@ async function listFolderItems(folderId) {
   return Array.isArray(data?.data) ? data.data : [];
 }
 
+async function listFolderItemsWithTimeout(folderId) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("WorkDrive list timeout (mobile)")),
+      LIST_TIMEOUT_MS
+    );
+  });
+
+  try {
+    const res = await Promise.race([listFolderItems(folderId), timeout]);
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function renderTable(items) {
   const tbody = document.getElementById("file-listing-body");
   if (!tbody) return;
@@ -459,7 +477,7 @@ async function loadFolder(folderId, isRoot) {
   logFlow(`טוען תיקייה ${folderId}...`);
 
   try {
-    const items = await listFolderItems(folderId);
+    const items = await listFolderItemsWithTimeout(folderId);
     logFlow(`נשלפה תיקייה ${folderId} עם ${items.length} פריטים`);
 
     if (isRoot && breadcrumbStack.length === 0) {
@@ -473,10 +491,10 @@ async function loadFolder(folderId, isRoot) {
     renderTable(items);
   } catch (e) {
     console.error(e);
-    const msg = e?.message || String(e) || "Unknown error";
+    const msg = formatError(e);
     logFlow(`WorkDrive error: ${msg}`, true);
-    showEmptyState(`Error loading folder items: ${msg}`, true);
-    showMessage(`WorkDrive load error: ${msg}`, true);
+    showEmptyState(`שגיאה בטעינת התיקייה: ${msg}`, true);
+    showMessage(`שגיאת WorkDrive: ${msg}`, true);
   }
 }
 
@@ -706,6 +724,8 @@ async function fetchCrmRecord(entity, recordId) {
   return null;
 }
 
+
+
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
     const apiDomain = getZohoApiDomainFromHost();
@@ -784,10 +804,10 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
   } catch (e) {
     console.error("PageLoad error:", e);
     const msg = e?.message || String(e) || "Unknown error";
-    showEmptyState(`Widget load error: ${msg}`, true);
-    showMessage(`Widget load error: ${msg}`, true);
+    showEmptyState(`Widget load error: ${msg}` , true);
+    showMessage(`Widget load error: ${msg}` , true);
+    logFlow(`Widget load error: ${formatError(e)}` , true);
   }
 });
 
 ZOHO.embeddedApp.init();
-
