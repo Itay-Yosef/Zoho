@@ -9,7 +9,8 @@ let workDriveZrc;
 let breadcrumbStack = []; // [{id, name}]
 let isUploading = false;
 let flowLog = [];
-const LIST_TIMEOUT_MS = 12000;
+const LIST_TIMEOUT_MS = 20000; // allow more time on mobile
+const LIST_RETRIES = 1;
 
 /* ===== Icons (local assets) ===== */
 const ICON_BASE = "./file-icons/";
@@ -389,6 +390,16 @@ async function listFolderItemsWithTimeout(folderId) {
   }
 }
 
+async function listFolderItemsWithRetry(folderId) {
+  try {
+    return await listFolderItemsWithTimeout(folderId);
+  } catch (err) {
+    logFlow(`WorkDrive list error, retrying once: ${formatError(err)}`, true);
+    // single retry
+    return await listFolderItemsWithTimeout(folderId);
+  }
+}
+
 function renderTable(items) {
   const tbody = document.getElementById("file-listing-body");
   if (!tbody) return;
@@ -477,7 +488,7 @@ async function loadFolder(folderId, isRoot) {
   logFlow(`טוען תיקייה ${folderId}...`);
 
   try {
-    const items = await listFolderItemsWithTimeout(folderId);
+    const items = await listFolderItemsWithRetry(folderId);
     logFlow(`נשלפה תיקייה ${folderId} עם ${items.length} פריטים`);
 
     if (isRoot && breadcrumbStack.length === 0) {
