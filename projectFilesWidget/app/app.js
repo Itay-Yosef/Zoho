@@ -1,4 +1,4 @@
-/* global ZOHO, zrc, ZDK */
+﻿/* global ZOHO, zrc, ZDK */
 
 let currentRecordId;
 let currentEntity;
@@ -9,7 +9,7 @@ let workDriveZrc;
 let breadcrumbStack = []; // [{id, name}]
 let isUploading = false;
 
-/* ===== Icons (ONLY local) ===== */
+/* ===== Icons (local assets) ===== */
 const ICON_BASE = "./file-icons/";
 const ICONS = {
   audio: "mc-file-audio.svg",
@@ -146,7 +146,6 @@ function iconHTMLForItem(item) {
   return `<img class="file-icon-img" src="${src}" alt="" onerror="this.remove()" />`;
 }
 
-/* ===== Date: dd/mm/yyyy HH:MM ===== */
 function formatILDateFromWorkDrive(attrs) {
   const ms =
     attrs?.modified_time_in_millisecond ??
@@ -171,14 +170,9 @@ function formatILDateFromWorkDrive(attrs) {
   )}:${pad(d.getMinutes())}`;
 }
 
-/* =========================================================
-   ✅ Zoho CRM Built-in Toast (ZDK.Client.showMessage)
-   ========================================================= */
-function showZohoToast(text, type /* 'success'|'error'|'warning'|'info' */) {
+function showZohoToast(text, type) {
   try {
     if (window.ZDK?.Client?.showMessage) {
-      // ZDK.Client.showMessage(message, { type })
-      // (Returns a Promise; no need to await here)
       ZDK.Client.showMessage(String(text), { type: type || "info" });
       return true;
     }
@@ -188,7 +182,6 @@ function showZohoToast(text, type /* 'success'|'error'|'warning'|'info' */) {
   return false;
 }
 
-/* fallback message bar (רק אם אין ZDK) */
 function showFallbackMessage(text, isError = false) {
   const el = document.getElementById("message");
   if (!el) return;
@@ -199,19 +192,13 @@ function showFallbackMessage(text, isError = false) {
   showFallbackMessage._t = setTimeout(() => (el.style.display = "none"), 3000);
 }
 
-/* wrapper אחד לכל הפרויקט */
 function showMessage(text, isError = false) {
   const type = isError ? "error" : "success";
-
-  // Try Zoho CRM built-in toast first
   const usedToast = showZohoToast(text, type);
   if (usedToast) return;
-
-  // fallback (אם רץ מחוץ ל-CRM / בלי ZDK)
   showFallbackMessage(text, isError);
 }
 
-/* ===== UI helpers ===== */
 function showEmptyState(text, isError = false) {
   const empty = document.getElementById("empty-state");
   const body = document.getElementById("file-listing-body");
@@ -251,7 +238,6 @@ async function safeParseZrcData(resp) {
   return resp.data;
 }
 
-/* ===== Skeleton Loading ===== */
 function renderSkeletonRows(count = 7) {
   const tbody = document.getElementById("file-listing-body");
   if (!tbody) return;
@@ -276,7 +262,6 @@ function renderSkeletonRows(count = 7) {
   tbody.innerHTML = html;
 }
 
-/* ===== Breadcrumbs (Root is ICON) ===== */
 function renderBreadcrumbs() {
   const wrap = document.getElementById("breadcrumbs");
   if (!wrap) return;
@@ -287,10 +272,10 @@ function renderBreadcrumbs() {
 
   const rootCrumb = document.createElement("span");
   rootCrumb.className = `crumb root${atRoot ? " current" : ""}`;
-  rootCrumb.title = "תיקייה ראשית";
+  rootCrumb.title = "Home";
   rootCrumb.innerHTML = `<img class="root-folder-icon" src="${
     ICON_BASE + ICONS.home
-  }" alt="תיקייה" onerror="this.remove()" />`;
+  }" alt="Home" onerror="this.remove()" />`;
 
   if (!atRoot) {
     rootCrumb.onclick = async () => {
@@ -304,7 +289,7 @@ function renderBreadcrumbs() {
   for (let i = 1; i < breadcrumbStack.length; i++) {
     const sep = document.createElement("span");
     sep.className = "sep";
-    sep.textContent = "›";
+    sep.textContent = "/";
     wrap.appendChild(sep);
 
     const c = breadcrumbStack[i];
@@ -312,7 +297,7 @@ function renderBreadcrumbs() {
 
     const crumb = document.createElement("span");
     crumb.className = `crumb${isCurrent ? " current" : ""}`;
-    crumb.textContent = c.name || "תיקייה";
+    crumb.textContent = c.name || "Folder";
     crumb.title = c.name || "";
 
     if (!isCurrent) {
@@ -332,7 +317,6 @@ async function navigateToFolder(folderId) {
   await loadFolder(folderId, false);
 }
 
-/* ===== WorkDrive API ===== */
 async function getItemInfo(itemId) {
   const resp = await workDriveZrc.get(`/files/${itemId}`, {
     headers: { Accept: "application/vnd.api+json" },
@@ -349,7 +333,6 @@ async function listFolderItems(folderId) {
   return Array.isArray(data?.data) ? data.data : [];
 }
 
-/* ===== Render table ===== */
 function renderTable(items) {
   const tbody = document.getElementById("file-listing-body");
   if (!tbody) return;
@@ -358,11 +341,10 @@ function renderTable(items) {
   tbody.innerHTML = "";
 
   if (!items || items.length === 0) {
-    showEmptyState("אין קבצים בתיקייה הזאת");
+    showEmptyState("No files in this folder");
     return;
   }
 
-  // folders first
   const sorted = [...items].sort((a, b) => {
     const af =
       a?.attributes?.is_folder === true ||
@@ -386,7 +368,7 @@ function renderTable(items) {
     const displayName = isFolder ? fullName : stripExt(fullName);
 
     const extOrType = isFolder
-      ? "תיקייה"
+      ? "Folder"
       : attrs.extn || getExt(fullName) || type || "";
 
     const mod = formatILDateFromWorkDrive(attrs);
@@ -423,7 +405,7 @@ async function onItemClick(item) {
   const isFolder = attrs.is_folder === true || type === "folder";
 
   if (isFolder) {
-    breadcrumbStack.push({ id: item.id, name: attrs.name || "תיקייה" });
+    breadcrumbStack.push({ id: item.id, name: attrs.name || "Folder" });
     await navigateToFolder(item.id);
     return;
   }
@@ -432,11 +414,9 @@ async function onItemClick(item) {
   if (permalink) window.open(permalink, "_blank");
 }
 
-/* ===== Folder loading ===== */
 async function loadFolder(folderId, isRoot) {
   currentFolderId = folderId;
 
-  // show skeleton immediately
   renderSkeletonRows(7);
 
   try {
@@ -445,7 +425,7 @@ async function loadFolder(folderId, isRoot) {
     if (isRoot && breadcrumbStack.length === 0) {
       const info = await getItemInfo(folderId);
       breadcrumbStack = [
-        { id: folderId, name: info?.attributes?.name || "תיקייה" },
+        { id: folderId, name: info?.attributes?.name || "root" },
       ];
     }
 
@@ -453,12 +433,12 @@ async function loadFolder(folderId, isRoot) {
     renderTable(items);
   } catch (e) {
     console.error(e);
-    showEmptyState("שגיאה בטעינת התיקייה");
-    showMessage("משהו השתבש בטעינה", true);
+    const msg = e?.message || String(e) || "Unknown error";
+    showEmptyState(`Error loading folder items: ${msg}`, true);
+    showMessage(`WorkDrive load error: ${msg}`, true);
   }
 }
 
-/* ===== Upload UI ===== */
 function wireUploadUI() {
   const btnFiles = document.getElementById("btn-upload-files");
   const inputFiles = document.getElementById("file-upload");
@@ -472,7 +452,6 @@ function wireUploadUI() {
   }
 }
 
-/* ===== Upload (LIKE HIS WORKING LOGIC) ===== */
 async function uploadFiles(fileList) {
   if (isUploading) return;
   if (!fileList || fileList.length === 0) return;
@@ -491,13 +470,13 @@ async function uploadFiles(fileList) {
     }
 
     if (successCount > 0)
-      showMessage(`הועלו ${successCount} קבצים בהצלחה`, false);
-    if (failCount > 0) showMessage(`${failCount} קבצים נכשלו`, true);
+      showMessage(`Uploaded ${successCount} file(s) successfully`, false);
+    if (failCount > 0) showMessage(`${failCount} file(s) failed`, true);
 
     await loadFolder(currentFolderId, false);
   } catch (e) {
     console.error(e);
-    showMessage("העלאה נכשלה", true);
+    showMessage("Upload failed", true);
   } finally {
     isUploading = false;
   }
@@ -506,7 +485,6 @@ async function uploadFiles(fileList) {
 async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
   const fileName = file?.name || "file";
 
-  // same filename validation as his code
   const format = /[`^+\=\[\]{};"\\<>\/]/;
   if (format.test(fileName)) {
     console.error("Invalid file name:", fileName);
@@ -514,7 +492,6 @@ async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
   }
 
   try {
-    // EXACTLY like his upload: Blob + multipart header + formdata content=blob
     const fileBlob = new Blob([file], {
       type: file?.type || "application/octet-stream",
     });
@@ -546,7 +523,6 @@ async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
   }
 }
 
-/* ===== Detect correct Zoho API domain (DC) ===== */
 function getZohoApiDomainFromHost() {
   const host = String(window.location.hostname || "").toLowerCase();
 
@@ -615,14 +591,87 @@ function showIdentifierError(text) {
   showMessage(msg, true);
 }
 
-/* ===== Zoho init ===== */
+function showLoadError(text) {
+  const msg =
+    text ||
+    "Failed to load data for this record. Please refresh and try again.";
+  showEmptyState(msg, true);
+  showMessage(msg, true);
+}
+
+function getFolderIdFromRecord(rec) {
+  if (!rec || typeof rec !== "object") return null;
+
+  const candidates = [
+    rec.projectFolderId,
+    rec.projectFolderID,
+    rec.ProjectFolderId,
+    rec.project_folder_id,
+    rec.Project_Folder_Id,
+    rec.projectFolder,
+    rec.ProjectFolder,
+    rec.workdriveFolderId,
+    rec.workDriveFolderId,
+    rec.WorkDriveFolderId,
+    rec.workdrive_folder_id,
+    rec.WorkDrive_Folder_Id,
+  ];
+
+  for (const c of candidates) {
+    if (c == null) continue;
+    if (typeof c === "object") {
+      if (c.id) {
+        const s = String(c.id).trim();
+        if (s) return s;
+      }
+      continue;
+    }
+    const s = String(c).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+async function fetchCrmRecord(entity, recordId) {
+  if (!entity || !recordId) return null;
+
+  let lastError = null;
+
+  try {
+    const res = await ZOHO.CRM.API.getRecord({
+      Entity: entity,
+      RecordID: recordId,
+    });
+    const row = res?.data?.[0];
+    if (row) return row;
+    if (res?.message) lastError = res.message;
+  } catch (e) {
+    console.error("ZOHO.CRM.API.getRecord failed:", e);
+    lastError = e?.message || String(e);
+  }
+
+  try {
+    const crmResp = await zrc.get(`/crm/v8/${entity}/${recordId}`);
+    const crmData = await safeParseZrcData(crmResp);
+    const row = crmData?.data?.[0];
+    if (row) return row;
+    if (crmData?.message) lastError = crmData.message;
+  } catch (e) {
+    console.error("zrc CRM fallback failed:", e);
+    lastError = e?.message || String(e);
+  }
+
+  if (lastError) throw new Error(lastError);
+  return null;
+}
+
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
     const apiDomain = getZohoApiDomainFromHost();
 
     workDriveZrc = zrc.createInstance({
       baseUrl: `${apiDomain}/workdrive/api/v1`,
-      connection: "zohoworkdrive", // ⬅️ השארתי כמו אצלך
+      connection: "zohoworkdrive",
     });
 
     wireUploadUI();
@@ -644,23 +693,32 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       return;
     }
 
-    const crmResp = await zrc.get(
-      `/crm/v8/${currentEntity}/${currentRecordId}`,
-    );
-    const crmData = await safeParseZrcData(crmResp);
-    const row = crmData?.data?.[0];
-
-    if (!row) {
-      showIdentifierError(
-        "Record details could not be loaded for the provided identifier.",
+    let row = null;
+    try {
+      row = await fetchCrmRecord(currentEntity, currentRecordId);
+    } catch (err) {
+      console.error("CRM record load failed:", err);
+      showLoadError(
+        `Record load failed: ${err?.message || String(err) || "Unknown error"}`,
       );
       return;
     }
 
-    // ⬅️ השארתי כמו אצלך
-    const folderId = row?.projectFolderId;
+    if (!row) {
+      showLoadError("Record details could not be loaded for this ID.");
+      return;
+    }
+
+    const folderId = getFolderIdFromRecord(row);
     if (!folderId) {
-      showEmptyState("אין תיקיית WorkDrive מקושרת לרשומה הזאת");
+      showEmptyState(
+        "No WorkDrive folder is linked to this record. Add a folder ID field value and reload.",
+        true,
+      );
+      showMessage(
+        "WorkDrive folder is missing on the record. Please set it and reload.",
+        true,
+      );
       return;
     }
 
@@ -670,8 +728,9 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     await loadFolder(rootFolderId, true);
   } catch (e) {
     console.error("PageLoad error:", e);
-    showEmptyState("שגיאה בטעינה");
-    showMessage("שגיאה בהתחברות ל-Zoho/WorkDrive", true);
+    const msg = e?.message || String(e) || "Unknown error";
+    showEmptyState(`Widget load error: ${msg}`, true);
+    showMessage(`Widget load error: ${msg}`, true);
   }
 });
 
