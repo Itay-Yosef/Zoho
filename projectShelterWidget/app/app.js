@@ -7,6 +7,7 @@ const MODULE_DOOR_OBJECTS = "doorObjects";
 const MODULE_WINDOW_OBJECTS = "windowObjects";
 const MODULE_ALUMINUM_OBJECTS = "aluminumObjects";
 const MODULE_FILTRATION_OBJECTS = "filtrationObjects";
+const MODULE_PROJECTS_FALLBACK = "Projects";
 
 /* Shelters fields */
 const F_shelterProject = "shelterProject";
@@ -26,6 +27,15 @@ const F_shelterNeedTiach = "shelterNeedTiach";
 const F_objectShelter = "objectShelter";
 const F_objectProject = "objectProject";
 const F_objectStatus = "objectStatus";
+const F_objectName = "Name";
+const F_objectRemarks = "objectRemarks";
+const F_objectContractorRemarks = "objectContactorRemarks";
+
+/* Project fields */
+const F_projectBuildingType = "projectBuildingType";
+const BUILDING_TYPE_RESIDENTIAL = "בניין מגורים";
+
+const FLAT_ROW_SIZE = 5;
 
 /***********************
  * UI refs
@@ -99,7 +109,74 @@ function normStatusText(v) {
   return pickText(v).replace(/\s+/g, " ").trim();
 }
 
+function normRemarkText(v) {
+  return String(v ?? "").trim();
+}
+
+function getObjectName(obj) {
+  const candidates = [
+    obj?.[F_objectName],
+    obj?.Name,
+    obj?.name,
+    obj?.display_value,
+    obj?.displayValue,
+    obj?.objectName,
+    obj?.Object_Name,
+    obj?.object_name,
+  ];
+
+  for (const c of candidates) {
+    const t = pickText(c).trim();
+    if (t) return t;
+  }
+
+  return obj?.id ? `#${obj.id}` : "Item";
+}
 /* lookup to id (יותר עמיד) */
+function normalizeBuildingTypeValues(raw) {
+  const vals = [];
+  const push = (v) => {
+    const s = String(v ?? "").trim();
+    if (s) vals.push(s);
+  };
+
+  push(raw);
+  if (raw && typeof raw === "object") {
+    push(raw.display_value);
+    push(raw.displayValue);
+    push(raw.actual_value);
+    push(raw.actualValue);
+    push(raw.value);
+    push(raw.name);
+  }
+  return vals;
+}
+
+function isResidentialBuildingType(raw) {
+  const targets = [BUILDING_TYPE_RESIDENTIAL.trim().toLowerCase()];
+  const vals = normalizeBuildingTypeValues(raw);
+  return vals.some((v) => {
+    const s = v.trim();
+    const lc = s.toLowerCase();
+    return targets.some((t) => lc === t || lc.includes(t));
+  });
+}
+
+function extractBuildingTypeFromRecord(rec) {
+  if (!rec || typeof rec !== "object") return null;
+  const candidates = [
+    rec[F_projectBuildingType],
+    rec.projectBuildingType,
+    rec.ProjectBuildingType,
+    rec.project_building_type,
+    rec.Project_Building_Type,
+  ];
+  for (const c of candidates) {
+    if (c != null) return c;
+  }
+  return null;
+}
+
 function shelterIdFromLookup(lookup) {
   if (!lookup) return null;
   if (Array.isArray(lookup)) lookup = lookup[0];
@@ -173,6 +250,48 @@ async function coqlAll(selectQueryBase) {
 }
 
 /***********************
+ * Project info
+ ***********************/
+async function fetchProjectBuildingType(entityName, projectId) {
+  const tried = new Set();
+  const entities = [
+    entityName,
+    MODULE_PROJECTS_FALLBACK,
+    MODULE_PROJECTS_FALLBACK.toLowerCase(),
+  ]
+    .map((e) => (e ? String(e).trim() : ""))
+    .filter(Boolean);
+
+  for (const ent of entities) {
+    if (tried.has(ent)) continue;
+    tried.add(ent);
+    try {
+      const res = await ZOHO.CRM.API.getRecord({
+        Entity: ent,
+        RecordID: projectId,
+      });
+      const rec = res?.data?.[0];
+      const val = extractBuildingTypeFromRecord(rec);
+      if (val != null) return val;
+    } catch (_) {}
+  }
+
+  for (const ent of entities) {
+    if (tried.has(`${ent}-coql`)) continue;
+    tried.add(`${ent}-coql`);
+    try {
+      const pid = escapeCOQLString(projectId);
+      const rows = await coqlAll(
+        `select ${F_projectBuildingType} from ${ent} where id = '${pid}' limit 1`,
+      );
+      const val = extractBuildingTypeFromRecord(rows?.[0]);
+      if (val != null) return val;
+    } catch (_) {}
+  }
+  return null;
+}
+
+/***********************
  * Data fetch
  ***********************/
 async function fetchSheltersByProject(projectId) {
@@ -208,7 +327,8 @@ async function fetchObjectsByShelterIds(shelterIds, moduleApiName) {
   for (const ch of chunks) {
     const inList = ch.map((id) => `'${escapeCOQLString(id)}'`).join(", ");
     const q = `
-      select id, ${F_objectShelter}, ${F_objectStatus}
+      select id, ${F_objectShelter}, ${F_objectStatus},
+        ${F_objectName}, ${F_objectRemarks}, ${F_objectContractorRemarks}
       from ${moduleApiName}
       where ${F_objectShelter}.id in (${inList})
     `.trim();
@@ -311,7 +431,7 @@ async function buildSheltersEntityCandidates() {
     const m = mods.find(
       (x) =>
         String(x?.api_name || x?.apiName || "").toLowerCase() ===
-        MODULE_SHELTERS.toLowerCase()
+        MODULE_SHELTERS.toLowerCase(),
     );
     if (!m) return;
 
@@ -418,16 +538,41 @@ function createObjIcon(typeKey, statusCls) {
   return d;
 }
 
-function createObjRow(typeKey, statusCls, count) {
+function createObjRow(typeKey, statusCls, objects) {
   const row = document.createElement("div");
   row.className = "objRow";
+
+  const count = objects.length;
 
   const cnt = document.createElement("span");
   cnt.className = "objCnt";
   cnt.textContent = `x${count}`;
 
+  const icon = createObjIcon(typeKey, statusCls);
+
   row.appendChild(cnt);
-  row.appendChild(createObjIcon(typeKey, statusCls));
+  row.appendChild(icon);
+
+  const tipLines = [];
+  for (const o of objects) {
+    const name = getObjectName(o);
+    const remark = normRemarkText(o.remarks);
+    const contractor = normRemarkText(o.contractorRemarks);
+
+    const parts = [name];
+    if (remark) parts.push(remark);
+    if (contractor) parts.push(contractor);
+
+    tipLines.push(parts.join("\n"));
+  }
+
+  if (tipLines.length) {
+    const tip = document.createElement("div");
+    tip.className = "objRowTip";
+    tip.textContent = tipLines.join("\n\n");
+    row.appendChild(tip);
+  }
+
   return row;
 }
 
@@ -458,22 +603,23 @@ function buildObjectsArea(objsByType) {
       continue;
     }
 
-    const counts = {
-      done: 0,
-      "done-defect": 0,
-      defect: 0,
-      notdone: 0,
-      unknown: 0,
+    const buckets = {
+      done: [],
+      "done-defect": [],
+      defect: [],
+      notdone: [],
+      unknown: [],
     };
     for (const o of arr) {
       const cls = statusClassFromValue(o.status);
-      counts[cls] = (counts[cls] || 0) + 1;
+      buckets[cls] = buckets[cls] || [];
+      buckets[cls].push(o);
     }
 
     for (const s of STATUS_ORDER) {
-      const c = counts[s.cls] || 0;
-      if (!c) continue;
-      col.appendChild(createObjRow(t.key, s.cls, c));
+      const bucket = buckets[s.cls] || [];
+      if (!bucket.length) continue;
+      col.appendChild(createObjRow(t.key, s.cls, bucket));
     }
 
     wrap.appendChild(col);
@@ -553,8 +699,8 @@ function createMamadCard(shelter, objsByType) {
   bottom.className = "mamad-bottom";
   bottom.appendChild(
     buildObjectsArea(
-      objsByType || { door: [], window: [], aluminum: [], filter: [] }
-    )
+      objsByType || { door: [], window: [], aluminum: [], filter: [] },
+    ),
   );
   card.appendChild(bottom);
 
@@ -658,6 +804,63 @@ function renderTable(entrances, floors, grouped, objsByShelterId) {
 
   table.appendChild(tbody);
   elLayoutHost.appendChild(table);
+
+  if (_ro) _ro.observe(table);
+}
+
+function renderFlatTable(shelters, objsByShelterId) {
+  elLayoutHost.innerHTML = "";
+
+  const table = document.createElement("table");
+  table.className = "matrix";
+
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  const th = document.createElement("th");
+  th.textContent = "ממדים / מממים";
+  th.style.textAlign = "center";
+  th.colSpan = FLAT_ROW_SIZE;
+  th.style.minWidth = `${FLAT_ROW_SIZE * CARD_W + (FLAT_ROW_SIZE - 1) * GRID_GAP + ZONE_PAD_X}px`;
+
+  trh.appendChild(th);
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const chunks = chunk(shelters, FLAT_ROW_SIZE);
+
+  for (const group of chunks) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "zone";
+    td.colSpan = FLAT_ROW_SIZE;
+    td.style.minWidth = `${FLAT_ROW_SIZE * CARD_W + (FLAT_ROW_SIZE - 1) * GRID_GAP + ZONE_PAD_X}px`;
+
+    const grid = document.createElement("div");
+    grid.className = "mamad-grid";
+    grid.style.gridTemplateColumns = `repeat(${group.length}, ${CARD_W}px)`;
+
+    for (const shelter of group) {
+      const sid = String(shelter.id);
+      const objs = objsByShelterId[sid] || {
+        door: [],
+        window: [],
+        aluminum: [],
+        filter: [],
+      };
+      grid.appendChild(createMamadCard(shelter, objs));
+    }
+
+    td.appendChild(grid);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  elLayoutHost.appendChild(table);
+
+  if (_ro) _ro.observe(table);
 }
 
 /***********************
@@ -677,7 +880,7 @@ function getProjectIdFromPageLoad(data) {
  ***********************/
 const RESIZE_WIDTH = 1400;
 const RESIZE_MIN_H = 520;
-const RESIZE_MAX_H = Number.POSITIVE_INFINITY;
+const RESIZE_MAX_H = Infinity;
 const RESIZE_PAD = 24;
 
 let _resizeRaf = null;
@@ -689,21 +892,26 @@ function _clamp(n, min, max) {
 }
 
 function calcDesiredWidgetHeight() {
-  const app = document.getElementById("app");
-  const body = document.body;
   const doc = document.documentElement;
+  const body = document.body;
+  const topbar = document.querySelector(".topbar");
   const table = document.querySelector("table.matrix");
 
-  const raw = Math.max(
-    app ? app.scrollHeight : 0,
-    body ? body.scrollHeight : 0,
+  const errH =
+    elError && elError.style.display !== "none" ? elError.offsetHeight : 0;
+  const stateH =
+    elState && elState.style.display !== "none" ? elState.offsetHeight : 0;
+
+  const layoutH = elLayoutHost ? elLayoutHost.scrollHeight : 0;
+  const tableH = table ? table.scrollHeight : 0;
+
+  const docH = Math.max(
     doc ? doc.scrollHeight : 0,
-    table ? table.offsetHeight : 0,
-    420
+    body ? body.scrollHeight : 0,
+    (topbar?.offsetHeight || 0) + errH + stateH + Math.max(layoutH, tableH),
   );
 
-  const total = raw + RESIZE_PAD;
-  return _clamp(total, RESIZE_MIN_H, RESIZE_MAX_H);
+  return _clamp(docH + RESIZE_PAD, RESIZE_MIN_H, RESIZE_MAX_H);
 }
 
 function scheduleAutoResize() {
@@ -721,15 +929,13 @@ function scheduleAutoResize() {
 
 function startAutoResizeObserver() {
   if (_ro) return;
-  const target =
-    document.getElementById("app") ||
-    document.querySelector("table.matrix") ||
-    elLayoutHost ||
-    document.body;
 
   if ("ResizeObserver" in window) {
     _ro = new ResizeObserver(() => scheduleAutoResize());
-    _ro.observe(target);
+    if (document.body) _ro.observe(document.body);
+    if (elLayoutHost) _ro.observe(elLayoutHost);
+    const tbl = document.querySelector("table.matrix");
+    if (tbl) _ro.observe(tbl);
   } else {
     window.addEventListener("resize", scheduleAutoResize);
   }
@@ -751,12 +957,15 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     const projectId = getProjectIdFromPageLoad(data);
     if (!projectId)
       throw new Error(
-        "לא נמצא Project ID מה-PageLoad. ודא שהווידג'ט נמצא בתוך Projects."
+        "לא נמצא Project ID מה-PageLoad. ודא שהווידג'ט נמצא בתוך Projects.",
       );
 
     await buildSheltersEntityCandidates();
 
-    const shelters = await fetchSheltersByProject(projectId);
+    const [buildingTypeRaw, shelters] = await Promise.all([
+      fetchProjectBuildingType(data?.Entity, projectId),
+      fetchSheltersByProject(projectId),
+    ]);
     if (!shelters || shelters.length === 0) {
       setLoading(false, "אין ממדים בפרויקט הזה.");
       return;
@@ -781,8 +990,11 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
         if (!sid) continue;
 
         initObjsForShelter(objsByShelterId, sid)[typeKey].push({
+          ...r,
           id: String(r.id),
           status: r?.[F_objectStatus],
+          remarks: r?.[F_objectRemarks],
+          contractorRemarks: r?.[F_objectContractorRemarks],
         });
       }
     }
@@ -792,10 +1004,15 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
     applyObjs(aluminums, "aluminum");
     applyObjs(filtrations, "filter");
 
-    const { entrances, floors, grouped } = groupShelters(shelters);
+    const isResidential = isResidentialBuildingType(buildingTypeRaw);
 
     setLoading(false);
-    renderTable(entrances, floors, grouped, objsByShelterId);
+    if (isResidential) {
+      const { entrances, floors, grouped } = groupShelters(shelters);
+      renderTable(entrances, floors, grouped, objsByShelterId);
+    } else {
+      renderFlatTable(shelters, objsByShelterId);
+    }
     scheduleAutoResize();
     setTimeout(scheduleAutoResize, 0);
   } catch (e) {

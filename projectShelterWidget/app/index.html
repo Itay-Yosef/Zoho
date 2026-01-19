@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ממדים</title>
+    <title>trying</title>
 
     <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
 
@@ -77,14 +77,14 @@
           sans-serif;
         background: var(--app-bg);
         color: var(--text);
-        overflow-x: hidden;
-        overflow-y: auto;
+        overflow: visible;
       }
 
       #app {
-        min-height: 100%;
         width: 100%;
-        display: block;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
       }
 
       .topbar {
@@ -155,8 +155,7 @@
       }
 
       .matrix-scroll {
-        overflow-x: auto;
-        overflow-y: visible;
+        overflow: visible;
         min-width: 0;
         min-height: 0;
         background: var(--app-bg);
@@ -195,6 +194,7 @@
         border-collapse: separate;
         border-spacing: 0;
         direction: rtl;
+        overflow: visible;
         min-width: 100%;
         width: fit-content;
         background: transparent;
@@ -332,7 +332,7 @@
         height: var(--card-h);
         border: 1px solid var(--line);
         border-radius: 12px;
-        overflow: hidden;
+        overflow: visible; /* allow tooltips to escape */
         background: #fff;
         box-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
         display: grid;
@@ -467,6 +467,7 @@
         align-items: center; /* ✅ middle */
         justify-content: flex-start; /* ✅ start ב-RTL = ימין */
         direction: rtl;
+        overflow: visible;
       }
 
       .objEmpty {
@@ -502,6 +503,29 @@
         justify-content: center;
         gap: 6px;
         height: var(--obj-cell);
+        position: relative;
+      }
+
+      .objRowTip {
+        position: absolute;
+        bottom: 100%;
+        right: 0;
+        transform: translateY(-6px);
+        background: #111827;
+        color: #fff;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: pre-wrap;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
+        display: none;
+        z-index: 5;
+        max-width: 260px;
+      }
+
+      .objRow:hover .objRowTip {
+        display: block;
       }
 
       .objCnt {
@@ -567,7 +591,7 @@
           </div>
         </div>
 
-        <h1 class="title">הממדים</h1>
+        <h1 class="title">ממדים של הפרויקט</h1>
         <div class="topbar-spacer"></div>
       </div>
 
