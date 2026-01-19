@@ -47,6 +47,7 @@
         display: flex;
         flex-direction: column;
         background: #ffffff;
+        position: relative;
       }
 
       /* ===== Top Bar (NO border-bottom) ===== */
@@ -282,6 +283,23 @@
         border-color: #f5c2c7;
       }
 
+      .debug-id {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 1200;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px dashed #c2c7cf;
+        background: #f2f4f7;
+        color: #555;
+        font-size: 12px;
+        font-weight: 800;
+        opacity: 0.9;
+        display: none;
+        pointer-events: none;
+      }
+
       /* ===== Skeleton Loading ===== */
       .skel {
         position: relative;
@@ -341,6 +359,7 @@
 
   <body>
     <div class="widget">
+      <div class="debug-id" id="debug-id" aria-hidden="true"></div>
       <div class="topbar">
         <div class="right-block">
           <div class="breadcrumbs" id="breadcrumbs"></div>

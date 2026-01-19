@@ -611,8 +611,21 @@ function showIdentifierError(text) {
   const msg =
     text ||
     "Unable to find the record identifier. Open the widget from a record in Zoho CRM.";
+  setDebugId(null);
   showEmptyState(msg, true);
   showMessage(msg, true);
+}
+
+function setDebugId(value) {
+  const el = document.getElementById("debug-id");
+  if (!el) return;
+  if (value) {
+    el.textContent = `ID: ${value}`;
+    el.style.display = "block";
+  } else {
+    el.textContent = "";
+    el.style.display = "none";
+  }
 }
 
 /* ===== Zoho init ===== */
@@ -643,6 +656,8 @@ ZOHO.embeddedApp.on("PageLoad", async function (data) {
       );
       return;
     }
+
+    setDebugId(currentRecordId);
 
     const crmResp = await zrc.get(
       `/crm/v8/${currentEntity}/${currentRecordId}`
