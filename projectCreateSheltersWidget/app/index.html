@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>יצירת Shelters</title>
+
+    <!-- Zoho Embedded App SDK -->
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
+
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --panel: #ffffff;
+        --ink: #0f172a;
+        --muted: #6b7280;
+        --primary: #1d6fe6;
+        --primary-strong: #0f5ccd;
+        --line: #e3e7f0;
+        --line-strong: #cdd5e1;
+        --danger: #d92d20;
+        --radius: 10px;
+        --shadow: 0 12px 32px rgba(15, 55, 125, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Assistant", "Lato", "Segoe UI", Tahoma, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      #app {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .surface {
+        width: 100%;
+        max-width: 100%;
+        margin: 0 auto;
+        background: var(--panel);
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: hidden;
+      }
+
+      .header-bar {
+        background: #0f69c7;
+        color: #fff;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .title-wrap {
+        display: grid;
+        gap: 4px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        font-weight: 800;
+        opacity: 0.9;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .subtitle {
+        margin: 0;
+        font-size: 13px;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 14px 18px 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .add-row-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 14px;
+        border-radius: 8px;
+        background: #f7fbff;
+        color: #0b4f9c;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          transform 0.1s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .add-row-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+      }
+
+      .add-row-btn svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        fill: none;
+      }
+
+      .subform {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        background: #fbfdff;
+      }
+
+      .table-head {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr 1fr 1fr 1.3fr 54px;
+        gap: 10px;
+        padding: 12px 14px;
+        background: #eef3fb;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        font-weight: 800;
+        color: #334155;
+        align-items: center;
+      }
+
+      .rows {
+        display: grid;
+        gap: 0;
+      }
+
+      .shelter-row {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .shelter-row:nth-child(odd) {
+        background: #fdfefe;
+      }
+
+      .row-grid {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr 1fr 1fr 1.3fr 54px;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .field input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #f8f9fc;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: var(--ink);
+        outline: none;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .field input:focus {
+        border-color: var(--primary-strong);
+        box-shadow: 0 0 0 2px rgba(29, 111, 230, 0.15);
+        background: #fff;
+      }
+
+      .delete-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .icon-btn {
+        height: 36px;
+        width: 36px;
+        border-radius: 9px;
+        border: 1px solid var(--line-strong);
+        background: #fff;
+        color: #c02626;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition:
+          transform 0.1s ease,
+          box-shadow 0.1s ease,
+          border-color 0.1s ease;
+      }
+
+      .icon-btn:hover {
+        transform: translateY(-1px);
+        border-color: #fda4af;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+      }
+
+      .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        fill: none;
+      }
+
+      .subform-footer {
+        padding: 12px 14px;
+        background: #f6f8fb;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .primary-btn {
+        border-radius: 10px;
+        border: 1px solid var(--primary-strong);
+        height: 44px;
+        padding: 0 16px;
+        font-size: 14px;
+        font-weight: 900;
+        cursor: pointer;
+        color: #fff;
+        background: linear-gradient(
+          180deg,
+          var(--primary),
+          var(--primary-strong)
+        );
+        min-width: 180px;
+        transition:
+          transform 0.1s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .primary-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(17, 96, 209, 0.16);
+      }
+
+      .alert {
+        margin: 0;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        font-weight: 800;
+        font-size: 14px;
+      }
+
+      .alert.success {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+      }
+      .alert.error {
+        background: #fff5f5;
+        border-color: #fecdd3;
+        color: #b42318;
+      }
+      .alert.info {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        color: #312e81;
+      }
+
+      .state {
+        text-align: center;
+        color: var(--muted);
+        font-weight: 800;
+        padding: 10px 6px;
+        font-size: 13px;
+      }
+
+      @media (max-width: 980px) {
+        .table-head,
+        .row-grid {
+          grid-template-columns: 1fr 1fr 1fr 1fr 1fr 54px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .header-bar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .table-head,
+        .row-grid {
+          grid-template-columns: 1fr 1fr;
+          grid-auto-rows: auto;
+        }
+        .delete-cell {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="surface">
+        <div class="header-bar">
+          <div class="title-wrap">
+            <p class="eyebrow">פרטי פרויקט</p>
+            <h1 class="title">הוספת Shelters</h1>
+            <p class="subtitle">
+              ממלאים כמו תת-טופס ומוסיפים כמה Shelters בבת אחת
+            </p>
+          </div>
+
+          <button id="addRow" class="add-row-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            הוסף שורה
+          </button>
+        </div>
+
+        <div class="content">
+          <div
+            id="alert"
+            class="alert info"
+            role="alert"
+            aria-live="assertive"
+            style="display: none"
+          ></div>
+
+          <div class="subform" aria-label="טופס Shelters">
+            <div class="table-head">
+              <span class="th">מיקום</span>
+              <span class="th">כניסה</span>
+              <span class="th">דירה</span>
+              <span class="th">קומה</span>
+              <span class="th">הערות</span>
+              <span class="th"></span>
+            </div>
+
+            <div id="rowsContainer" class="rows"></div>
+
+            <div class="subform-footer">
+              <button id="saveBtn" class="primary-btn" type="button">
+                צור ממדים
+              </button>
+            </div>
+          </div>
+
+          <div
+            id="state"
+            class="state"
+            role="status"
+            aria-live="polite"
+            style="display: none"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

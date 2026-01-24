@@ -3,99 +3,135 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>קבצי WorkDrive</title>
+    <title>מסמכים מקושרים</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
 
     <style>
+      /* ===== Arial everywhere ===== */
+      html,
+      body,
+      button,
+      input,
+      select,
+      textarea,
+      table,
+      th,
+      td,
+      a,
+      span,
+      div {
+        font-family: Arial, sans-serif !important;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
       html,
       body {
         height: 100%;
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
         background: transparent;
       }
 
       body {
-        overflow: hidden;
-      }
-
-      .debug-log {
-        background: #f7f8fa;
-        border-bottom: 1px solid #e9ebee;
-        padding: 8px 12px;
-        font-size: 12px;
-        color: #444;
-        line-height: 1.4;
-        max-height: 140px;
-        overflow: auto;
-        direction: rtl;
-      }
-
-      .debug-log .title {
-        font-weight: 800;
-        margin-bottom: 4px;
-      }
-
-      .debug-log .item.error {
-        color: #b42318;
+        overflow: hidden; /* scroll inside table area */
       }
 
       .widget {
-        min-height: 100vh;
-        height: 100%;
+        height: 100vh;
         display: flex;
         flex-direction: column;
         background: #ffffff;
       }
 
+      /* ===== Top Bar (NO border-bottom) ===== */
       .topbar {
         position: sticky;
         top: 0;
         z-index: 1000;
         background: #ffffff;
+
+        padding: 0; /* no side padding */
+        min-height: 46px;
+
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e9ebee;
+
+        direction: rtl;
+        border-bottom: none; /* IMPORTANT */
+      }
+
+      .right-block {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding-right: 12px;
       }
 
       .breadcrumbs {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
+        direction: rtl;
         flex-wrap: wrap;
         min-width: 0;
-        font-size: 16px;
-        font-weight: 700;
+
+        min-height: 28px;
+        line-height: 28px;
+
+        font-size: 18px;
+        font-weight: 800;
       }
 
-      .crumb {
-        color: #0b66c3;
-        cursor: pointer;
-        white-space: nowrap;
-        max-width: 220px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .crumb.current {
-        color: #111;
-        cursor: default;
+      .crumb,
+      .sep {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        line-height: 28px;
       }
 
       .crumb.root {
         width: 28px;
         height: 28px;
-        display: inline-flex;
-        align-items: center;
         justify-content: center;
+        cursor: pointer;
       }
 
       .crumb.root img.root-folder-icon {
         width: 22px;
         height: 22px;
         display: block;
+      }
+
+      .crumb {
+        color: #a3a3a3;
+        cursor: pointer;
+        white-space: nowrap;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .crumb:hover {
+        text-decoration: underline;
+      }
+
+      .crumb.root:hover {
+        text-decoration: none;
+      }
+
+      .crumb.current {
+        color: #111;
+        cursor: default;
+        text-decoration: none;
       }
 
       .sep {
@@ -105,26 +141,29 @@
       }
 
       .actions {
-        margin-right: auto;
+        margin-right: auto; /* RTL pushes actions to LEFT */
         display: flex;
         align-items: center;
         gap: 10px;
+        padding-left: 12px;
       }
 
       .btn {
         padding: 8px 12px;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         cursor: pointer;
         font-size: 14px;
-        font-weight: 700;
+        font-weight: 800;
         background: #0b66c3;
         color: #fff;
+        user-select: none;
       }
 
       .btn:hover {
         filter: brightness(0.95);
       }
+
       .btn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
@@ -134,10 +173,11 @@
         display: none;
       }
 
+      /* (fallback only) - אם ZDK לא זמין */
       .message {
         display: none;
         padding: 8px 12px;
-        font-weight: 700;
+        font-weight: 800;
         background: #e9f6ee;
         color: #0f5132;
         border-bottom: 1px solid #e9ebee;
@@ -151,13 +191,13 @@
         flex: 1 1 auto;
         overflow: auto;
         background: #ffffff;
-        -webkit-overflow-scrolling: touch;
       }
 
       table {
         width: 100%;
         min-width: 560px;
         border-collapse: collapse;
+        table-layout: fixed;
         direction: rtl;
       }
 
@@ -166,6 +206,7 @@
         top: 0;
         z-index: 50;
         background: #ffffff;
+
         padding: 10px 12px;
         font-weight: 800;
         color: #111;
@@ -191,10 +232,15 @@
         display: flex;
         direction: rtl;
         align-items: center;
+        justify-content: flex-start;
         gap: 10px;
         cursor: pointer;
         color: #0b66c3;
         min-width: 0;
+      }
+
+      .file-name:hover {
+        text-decoration: underline;
       }
 
       .file-icon {
@@ -205,6 +251,7 @@
         align-items: center;
         justify-content: center;
       }
+
       .file-icon-img {
         width: 20px;
         height: 20px;
@@ -219,48 +266,15 @@
       }
 
       .empty-state {
-        padding: 32px 12px;
+        padding: 46px 12px;
         text-align: center;
         color: #666;
-        font-weight: 700;
+        font-weight: 800;
         background: #ffffff;
         display: none;
-        border: 1px solid transparent;
-        border-radius: 10px;
       }
 
-      .empty-state.error {
-        color: #b42318;
-        background: #fff6f6;
-        border-color: #f5c2c7;
-      }
-
-      @media (max-width: 640px) {
-        .widget {
-          height: auto;
-        }
-        .topbar {
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .breadcrumbs {
-          font-size: 14px;
-        }
-        .actions {
-          width: 100%;
-          justify-content: flex-start;
-        }
-        table {
-          min-width: 100%;
-        }
-        thead th,
-        tbody td {
-          padding: 8px 10px;
-          font-size: 13px;
-        }
-      }
-
-      /* Skeleton */
+      /* ===== Skeleton Loading ===== */
       .skel {
         position: relative;
         overflow: hidden;
@@ -290,6 +304,7 @@
           transform: translateX(520px);
         }
       }
+
       .skel-icon {
         width: 20px;
         height: 20px;
@@ -306,6 +321,7 @@
         height: 12px;
         width: 140px;
       }
+
       .skel-name-wrap {
         display: flex;
         direction: rtl;
@@ -318,19 +334,19 @@
   <body>
     <div class="widget">
       <div class="topbar">
-        <div class="breadcrumbs" id="breadcrumbs"></div>
+        <div class="right-block">
+          <div class="breadcrumbs" id="breadcrumbs"></div>
+        </div>
+
         <div class="actions">
           <input type="file" id="file-upload" multiple />
           <button class="btn" id="btn-upload-files" type="button">
-            העלאת קבצים
+            העלה קבצים
           </button>
         </div>
       </div>
 
-      <div class="debug-log" id="debug-log" aria-live="polite">
-        <div class="title">לוג</div>
-      </div>
-
+      <!-- fallback only -->
       <div class="message" id="message"></div>
 
       <div class="table-wrap">
@@ -339,7 +355,7 @@
             <tr>
               <th style="width: 55%">שם</th>
               <th style="width: 15%">סוג</th>
-              <th style="width: 30%">תאריך עדכון</th>
+              <th style="width: 30%">תאריך שינוי</th>
             </tr>
           </thead>
           <tbody id="file-listing-body"></tbody>
@@ -349,7 +365,6 @@
       </div>
     </div>
 
-    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

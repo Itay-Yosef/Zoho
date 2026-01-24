@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Email Sender</title>
+
+    <!-- Zoho Embedded App SDK -->
+    <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
+
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap");
+
+      :root {
+        --bg: #f5f7fb;
+        --surface: #ffffff;
+        --ink: #1f2937;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --primary: #0b65c2;
+        --primary-strong: #0a4fa0;
+        --accent: #16a34a;
+        --danger: #d92d20;
+        --radius: 12px;
+        --shadow: 0 18px 40px rgba(15, 31, 64, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        font-family: "Source Sans 3", "Segoe UI", Tahoma, sans-serif;
+        color: var(--ink);
+      }
+
+      #app {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .shell {
+        width: 100%;
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 18px 18px 24px;
+      }
+
+      .pane {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        border: 1px solid #e4e7ec;
+      }
+
+      .top-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        background: linear-gradient(120deg, #0b65c2, #0a4fa0);
+        color: #fff;
+      }
+
+      .top-bar .title {
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0;
+      }
+      .top-bar .subtitle {
+        margin: 2px 0 0;
+        opacity: 0.85;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .top-bar .spacer {
+        flex: 1;
+      }
+
+      .top-bar .send-btn {
+        border: none;
+        background: #fff;
+        color: #0b65c2;
+        padding: 10px 18px;
+        border-radius: 10px;
+        font-weight: 800;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+        transition:
+          transform 0.12s ease,
+          box-shadow 0.12s ease;
+      }
+
+      .top-bar .send-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+      }
+      .top-bar .send-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .content {
+        padding: 18px 20px 24px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .field-row {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        align-items: center;
+        gap: 12px;
+      }
+      .field-label {
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      .input,
+      .textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 15px;
+        background: #fafbff;
+        transition:
+          border-color 0.12s ease,
+          box-shadow 0.12s ease;
+      }
+
+      .input:focus,
+      .textarea:focus,
+      .editor:focus-within {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(11, 101, 194, 0.14);
+        background: #fff;
+      }
+
+      .muted-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: #eef2ff;
+        color: #4338ca;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .editor {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-height: 240px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: #f8fafc;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .tool-btn {
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 8px;
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .tool-btn:hover {
+        border-color: #cbd5e1;
+      }
+
+      .body-area {
+        padding: 14px 16px;
+        min-height: 200px;
+        outline: none;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .attachments {
+        display: grid;
+        gap: 8px;
+      }
+
+      .attach-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .attach-btn {
+        border: 1px dashed var(--primary);
+        background: #f8fbff;
+        color: var(--primary);
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .attach-btn:hover {
+        background: #eef4ff;
+      }
+      .attach-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .pill-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #f1f5f9;
+        border-radius: 999px;
+        font-weight: 700;
+        border: 1px solid #e5e7eb;
+      }
+
+      .pill .remove {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-weight: 900;
+        color: #9ca3af;
+      }
+
+      .status-bar {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #eef2ff;
+        color: #312e81;
+        border: 1px solid #dfe3f0;
+        font-weight: 700;
+        display: none;
+      }
+
+      .status-bar.error {
+        background: #fff1f2;
+        color: #b91c1c;
+        border-color: #fecdd3;
+      }
+      .status-bar.success {
+        background: #ecfdf3;
+        color: #166534;
+        border-color: #bbf7d0;
+      }
+
+      .row-inline {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .header-chip {
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.16);
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      /* Modal */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.32);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 1000;
+      }
+
+      .modal {
+        width: 100%;
+        max-width: 880px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+        display: flex;
+        flex-direction: column;
+        max-height: 88vh;
+      }
+
+      .modal-header {
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #f8fafc;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .crumbs {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: #eef2ff;
+        color: #312e81;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .crumb.current {
+        background: #e2e8f0;
+        color: #0f172a;
+        cursor: default;
+      }
+
+      .modal-body {
+        padding: 0;
+        overflow: auto;
+        flex: 1;
+      }
+
+      .file-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .file-table thead th {
+        text-align: left;
+        padding: 12px 14px;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 800;
+        background: #f8fafc;
+      }
+
+      .file-table tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .file-row {
+        cursor: pointer;
+      }
+      .file-row:hover td {
+        background: #f8fbff;
+      }
+
+      .modal-footer {
+        padding: 12px 16px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .btn.secondary {
+        background: #f1f5f9;
+        color: #0f172a;
+        border: 1px solid #e5e7eb;
+      }
+      .btn.primary {
+        background: var(--primary);
+        color: #fff;
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .skeleton {
+        height: 12px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #f1f5f9, #e2e8f0, #f1f5f9);
+        background-size: 200% 100%;
+        animation: shimmer 1.2s ease-in-out infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .field-row {
+          grid-template-columns: 1fr;
+        }
+        .field-label {
+          margin-bottom: 4px;
+        }
+        .top-bar {
+          flex-wrap: wrap;
+        }
+        .top-bar .send-btn {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="shell">
+        <div class="pane">
+          <div class="top-bar">
+            <div>
+              <p class="title">Send Email</p>
+              <p class="subtitle">
+                From allowed sender · Attach from WorkDrive
+              </p>
+            </div>
+            <div class="header-chip" id="fromChip">From: —</div>
+            <div class="spacer"></div>
+            <button id="sendBtn" class="send-btn" type="button">Send</button>
+          </div>
+
+          <div class="content">
+            <div id="alert" class="status-bar" role="alert"></div>
+
+            <div class="field-row">
+              <span class="field-label">To</span>
+              <input
+                id="toInput"
+                class="input"
+                type="email"
+                placeholder="recipient@example.com"
+              />
+            </div>
+
+            <div class="field-row">
+              <span class="field-label">CC/BCC</span>
+              <div class="row-inline">
+                <input
+                  id="ccInput"
+                  class="input"
+                  type="text"
+                  placeholder="cc@example.com, cc2@example.com"
+                  style="flex: 1"
+                />
+                <input
+                  id="bccInput"
+                  class="input"
+                  type="text"
+                  placeholder="bcc@example.com"
+                  style="flex: 1"
+                />
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-label">Subject</span>
+              <input id="subjectInput" class="input" type="text" />
+            </div>
+
+            <div class="field-row" style="align-items: flex-start">
+              <span class="field-label">Body</span>
+              <div class="editor" id="editor">
+                <div class="toolbar">
+                  <button class="tool-btn" data-cmd="bold" type="button">
+                    B
+                  </button>
+                  <button class="tool-btn" data-cmd="italic" type="button">
+                    I
+                  </button>
+                  <button class="tool-btn" data-cmd="underline" type="button">
+                    U
+                  </button>
+                  <button
+                    class="tool-btn"
+                    data-cmd="insertUnorderedList"
+                    type="button"
+                  >
+                    &#8226;
+                  </button>
+                </div>
+                <div
+                  id="bodyInput"
+                  class="body-area"
+                  contenteditable="true"
+                ></div>
+              </div>
+            </div>
+
+            <div class="attachments">
+              <div class="attach-actions">
+                <button id="attachBtn" class="attach-btn" type="button">
+                  Attach from WorkDrive
+                </button>
+                <span class="muted-chip" id="folderInfo"
+                  >WorkDrive folder: —</span
+                >
+              </div>
+              <div id="attachmentsList" class="pill-list"></div>
+            </div>
+
+            <div id="state" class="status-bar" role="status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Picker Modal -->
+    <div
+      id="pickerBackdrop"
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal">
+        <div class="modal-header">
+          <strong>Choose files</strong>
+          <div id="pickerCrumbs" class="crumbs"></div>
+          <div class="spacer"></div>
+          <span class="muted-chip" id="pickerFolderLabel"></span>
+        </div>
+        <div class="modal-body">
+          <table class="file-table">
+            <thead>
+              <tr>
+                <th style="width: 46px"></th>
+                <th>Name</th>
+                <th style="width: 140px">Type</th>
+                <th style="width: 180px">Modified</th>
+              </tr>
+            </thead>
+            <tbody id="pickerTableBody"></tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <button id="pickerCancel" class="btn secondary" type="button">
+            Cancel
+          </button>
+          <button id="pickerAttach" class="btn primary" type="button">
+            Attach selected
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
