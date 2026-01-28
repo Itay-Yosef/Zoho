@@ -1,372 +1,271 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>יצירת Shelters</title>
+    <title>ניהול ממדים</title>
 
     <!-- Zoho Embedded App SDK -->
     <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
 
     <style>
       :root {
-        --bg: #f3f6fb;
-        --panel: #ffffff;
-        --ink: #0f172a;
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --ink: #111827;
         --muted: #6b7280;
-        --primary: #1d6fe6;
-        --primary-strong: #0f5ccd;
-        --line: #e3e7f0;
-        --line-strong: #cdd5e1;
+        --line: #e5e7eb;
+        --primary: #0b65c2;
         --danger: #d92d20;
-        --radius: 10px;
-        --shadow: 0 12px 32px rgba(15, 55, 125, 0.12);
+        --ok: #16a34a;
+        --radius: 12px;
       }
-
       * {
         box-sizing: border-box;
       }
-
       body {
         margin: 0;
-        min-height: 100vh;
-        font-family: "Assistant", "Lato", "Segoe UI", Tahoma, sans-serif;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Arial,
+          "Noto Sans Hebrew",
+          sans-serif;
         background: var(--bg);
         color: var(--ink);
       }
-
-      #app {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
+      .wrap {
+        max-width: 1300px;
+        margin: 0 auto;
+        padding: 14px;
+      }
+      .banner {
+        display: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        padding: 10px 12px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        line-height: 1.35;
+      }
+      .banner.show {
+        display: block;
+      }
+      .banner.info {
+        border-color: #cbd5e1;
+      }
+      .banner.ok {
+        border-color: #bbf7d0;
+      }
+      .banner.err {
+        border-color: #fecaca;
       }
 
-      .surface {
-        width: 100%;
-        max-width: 100%;
-        margin: 0 auto;
-        background: var(--panel);
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
         overflow: hidden;
       }
-
-      .header-bar {
-        background: #0f69c7;
-        color: #fff;
-        padding: 16px 20px;
+      header {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .meta {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .title-wrap {
-        display: grid;
-        gap: 4px;
-      }
-
-      .eyebrow {
-        margin: 0;
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        font-weight: 800;
-        opacity: 0.9;
-      }
-
-      .title {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 900;
-      }
-
-      .subtitle {
-        margin: 0;
-        font-size: 13px;
-        opacity: 0.9;
-      }
-
-      .content {
-        padding: 14px 18px 18px;
-        display: grid;
+        flex-wrap: wrap;
         gap: 10px;
+        color: var(--muted);
+        font-size: 13px;
       }
-
-      .add-row-btn {
-        display: inline-flex;
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        align-items: center;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .toggle {
+        display: flex;
         align-items: center;
         gap: 8px;
-        height: 40px;
-        padding: 0 14px;
-        border-radius: 8px;
-        background: #f7fbff;
-        color: #0b4f9c;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        font-weight: 800;
-        cursor: pointer;
-        transition:
-          transform 0.1s ease,
-          box-shadow 0.15s ease;
-      }
-
-      .add-row-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
-      }
-
-      .add-row-btn svg {
-        width: 16px;
-        height: 16px;
-        stroke: currentColor;
-        stroke-width: 2.4;
-        fill: none;
-      }
-
-      .subform {
+        padding: 8px 10px;
         border: 1px solid var(--line);
-        border-radius: 14px;
-        overflow: hidden;
-        background: #fbfdff;
-      }
-
-      .table-head {
-        display: grid;
-        grid-template-columns: 1.3fr 1fr 1fr 1fr 1.3fr 54px;
-        gap: 10px;
-        padding: 12px 14px;
-        background: #eef3fb;
-        border-bottom: 1px solid var(--line);
-        font-size: 13px;
-        font-weight: 800;
-        color: #334155;
-        align-items: center;
-      }
-
-      .rows {
-        display: grid;
-        gap: 0;
-      }
-
-      .shelter-row {
-        padding: 12px 14px;
-        border-bottom: 1px solid var(--line);
-        background: #fff;
-      }
-
-      .shelter-row:nth-child(odd) {
-        background: #fdfefe;
-      }
-
-      .row-grid {
-        display: grid;
-        grid-template-columns: 1.3fr 1fr 1fr 1fr 1.3fr 54px;
-        gap: 10px;
-        align-items: center;
-      }
-
-      .field input {
-        width: 100%;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        background: #f8f9fc;
-        padding: 10px 12px;
-        font-size: 14px;
-        color: var(--ink);
-        outline: none;
-        transition:
-          border-color 0.15s ease,
-          box-shadow 0.15s ease;
-      }
-
-      .field input:focus {
-        border-color: var(--primary-strong);
-        box-shadow: 0 0 0 2px rgba(29, 111, 230, 0.15);
-        background: #fff;
-      }
-
-      .delete-cell {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .icon-btn {
-        height: 36px;
-        width: 36px;
-        border-radius: 9px;
-        border: 1px solid var(--line-strong);
-        background: #fff;
-        color: #c02626;
-        display: grid;
-        place-items: center;
-        cursor: pointer;
-        transition:
-          transform 0.1s ease,
-          box-shadow 0.1s ease,
-          border-color 0.1s ease;
-      }
-
-      .icon-btn:hover {
-        transform: translateY(-1px);
-        border-color: #fda4af;
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-      }
-
-      .icon-btn svg {
-        width: 16px;
-        height: 16px;
-        stroke: currentColor;
-        stroke-width: 2.2;
-        fill: none;
-      }
-
-      .subform-footer {
-        padding: 12px 14px;
-        background: #f6f8fb;
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        justify-content: flex-end;
-      }
-
-      .primary-btn {
         border-radius: 10px;
-        border: 1px solid var(--primary-strong);
-        height: 44px;
-        padding: 0 16px;
-        font-size: 14px;
-        font-weight: 900;
-        cursor: pointer;
-        color: #fff;
-        background: linear-gradient(
-          180deg,
-          var(--primary),
-          var(--primary-strong)
-        );
-        min-width: 180px;
-        transition:
-          transform 0.1s ease,
-          box-shadow 0.15s ease;
+        background: #fff;
+        font-size: 13px;
       }
-
-      .primary-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 10px 20px rgba(17, 96, 209, 0.16);
+      .toggle input {
+        transform: translateY(1px);
       }
-
-      .alert {
-        margin: 0;
-        padding: 12px 14px;
-        border-radius: 12px;
+      button {
         border: 1px solid var(--line);
-        font-weight: 800;
-        font-size: 14px;
+        background: #fff;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 13px;
+        cursor: pointer;
       }
-
-      .alert.success {
-        background: #f0fdf4;
-        border-color: #bbf7d0;
-        color: #166534;
+      button.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
       }
-      .alert.error {
-        background: #fff5f5;
-        border-color: #fecdd3;
-        color: #b42318;
+      button.danger {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
       }
-      .alert.info {
-        background: #eef2ff;
-        border-color: #c7d2fe;
-        color: #312e81;
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
       }
-
-      .state {
+      .tableWrap {
+        padding: 0;
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1100px;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: #f9fafb;
+        border-bottom: 1px solid var(--line);
+        padding: 10px;
+        text-align: right;
+        font-size: 12px;
+        color: #374151;
+        z-index: 1;
+      }
+      tbody td {
+        border-bottom: 1px solid var(--line);
+        padding: 8px 10px;
+        vertical-align: top;
+        font-size: 13px;
+      }
+      tbody tr:hover {
+        background: #fafafa;
+      }
+      .pill {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+        margin-inline-start: 6px;
+        background: #fff;
+      }
+      .link {
+        color: var(--primary);
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      input[type="text"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .loading {
+        padding: 16px;
         text-align: center;
         color: var(--muted);
-        font-weight: 800;
-        padding: 10px 6px;
-        font-size: 13px;
       }
-
-      @media (max-width: 980px) {
-        .table-head,
-        .row-grid {
-          grid-template-columns: 1fr 1fr 1fr 1fr 1fr 54px;
-        }
-      }
-
-      @media (max-width: 760px) {
-        .header-bar {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-        .table-head,
-        .row-grid {
-          grid-template-columns: 1fr 1fr;
-          grid-auto-rows: auto;
-        }
-        .delete-cell {
-          justify-content: flex-start;
-        }
+      .empty {
+        padding: 18px;
+        text-align: center;
+        color: var(--muted);
       }
     </style>
   </head>
-
   <body>
-    <div id="app">
-      <div class="surface">
-        <div class="header-bar">
-          <div class="title-wrap">
-            <p class="eyebrow">פרטי פרויקט</p>
-            <h1 class="title">הוספת Shelters</h1>
-            <p class="subtitle">
-              ממלאים כמו תת-טופס ומוסיפים כמה Shelters בבת אחת
-            </p>
-          </div>
+    <div class="wrap">
+      <div id="banner" class="banner"></div>
 
-          <button id="addRow" class="add-row-btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            הוסף שורה
+      <div class="card">
+        <header>
+          <h1 id="title">ניהול ממדים</h1>
+          <div class="meta">
+            <div id="metaCity">עיר: —</div>
+            <div id="metaAddr">כתובת פרויקט: —</div>
+          </div>
+        </header>
+
+        <div class="toolbar">
+          <label class="toggle" title="שומר/מבטל פיצול שם">
+            <input id="toggleSplitName" type="checkbox" />
+            <span>פיצול שם</span>
+          </label>
+
+          <label class="toggle" title="שומר/מבטל פיצול כתובת">
+            <input id="toggleSplitAddr" type="checkbox" />
+            <span>פיצול כתובת</span>
+          </label>
+
+          <button id="btnFillNames" style="display: none">
+            מלא שמות לפי שם הפרויקט הנוכחי
           </button>
+          <button id="btnFillAddr" style="display: none">
+            מלא כתובות לפי כתובת הפרויקט הנוכחית
+          </button>
+
+          <div class="spacer"></div>
+
+          <button id="btnAdd">הוסף ממד</button>
+          <button id="btnDelete" class="danger" style="display: none">
+            מחק נבחרים
+          </button>
+          <button id="btnSave" class="primary" disabled>שמור שינויים</button>
+          <button id="btnRefresh">רענן</button>
         </div>
 
-        <div class="content">
-          <div
-            id="alert"
-            class="alert info"
-            role="alert"
-            aria-live="assertive"
-            style="display: none"
-          ></div>
-
-          <div class="subform" aria-label="טופס Shelters">
-            <div class="table-head">
-              <span class="th">מיקום</span>
-              <span class="th">כניסה</span>
-              <span class="th">דירה</span>
-              <span class="th">קומה</span>
-              <span class="th">הערות</span>
-              <span class="th"></span>
-            </div>
-
-            <div id="rowsContainer" class="rows"></div>
-
-            <div class="subform-footer">
-              <button id="saveBtn" class="primary-btn" type="button">
-                צור ממדים
-              </button>
-            </div>
+        <div class="tableWrap">
+          <div id="loading" class="loading">טוען…</div>
+          <div id="empty" class="empty" style="display: none">
+            אין ממדים לפרויקט הזה.
           </div>
 
-          <div
-            id="state"
-            class="state"
-            role="status"
-            aria-live="polite"
-            style="display: none"
-          ></div>
+          <table id="grid" style="display: none">
+            <thead>
+              <tr>
+                <th style="width: 44px">
+                  <input id="chkAll" type="checkbox" />
+                </th>
+                <th style="width: 220px">ממד</th>
+                <th style="width: 180px">כניסה / קומה / דירה</th>
+                <th style="width: 220px">שם לממד</th>
+                <th>כתובת ממד (ללא עיר)</th>
+                <th style="width: 260px">הערות</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>

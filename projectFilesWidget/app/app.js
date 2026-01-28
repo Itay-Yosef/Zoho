@@ -9,6 +9,13 @@ let workDriveZrc;
 let breadcrumbStack = []; // [{id, name}]
 let isUploading = false;
 
+/** ===========================
+ * ✅ התאמות אצלך
+ * =========================== */
+const CRM_FOLDER_FIELD = "projectFolderId"; // השדה ב-CRM שמכיל את ID התיקייה
+const WORKDRIVE_CONNECTION = "zohoworkdrive"; // שם ה-Connection
+const FUNC_API_NAME = "getprojectfiles"; // API NAME של הפונקציה (בלי standalone.)
+
 /* ===== Icons (ONLY local) ===== */
 const ICON_BASE = "./file-icons/";
 const ICONS = {
@@ -85,6 +92,19 @@ const EXT = {
   text: new Set(["txt", "md", "log"]),
 };
 
+function isProbablyMobile() {
+  const ua = String(navigator.userAgent || "");
+  return /Android|iPhone|iPad|iPod/i.test(ua);
+}
+
+function withTimeout(promise, ms, msg) {
+  let t;
+  const timeout = new Promise((_, rej) => {
+    t = setTimeout(() => rej(new Error(msg || "timeout")), ms);
+  });
+  return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
+}
+
 function getExt(name) {
   if (!name) return "";
   const clean = String(name).split("?")[0].split("#")[0];
@@ -146,7 +166,6 @@ function iconHTMLForItem(item) {
   return `<img class="file-icon-img" src="${src}" alt="" onerror="this.remove()" />`;
 }
 
-/* ===== Date: dd/mm/yyyy HH:MM ===== */
 function formatILDateFromWorkDrive(attrs) {
   const ms =
     attrs?.modified_time_in_millisecond ??
@@ -171,24 +190,6 @@ function formatILDateFromWorkDrive(attrs) {
   )}:${pad(d.getMinutes())}`;
 }
 
-/* =========================================================
-   ✅ Zoho CRM Built-in Toast (ZDK.Client.showMessage)
-   ========================================================= */
-function showZohoToast(text, type /* 'success'|'error'|'warning'|'info' */) {
-  try {
-    if (window.ZDK?.Client?.showMessage) {
-      // ZDK.Client.showMessage(message, { type })
-      // (Returns a Promise; no need to await here)
-      ZDK.Client.showMessage(String(text), { type: type || "info" });
-      return true;
-    }
-  } catch (e) {
-    console.warn("ZDK.Client.showMessage failed:", e);
-  }
-  return false;
-}
-
-/* fallback message bar (רק אם אין ZDK) */
 function showFallbackMessage(text, isError = false) {
   const el = document.getElementById("message");
   if (!el) return;
@@ -199,19 +200,19 @@ function showFallbackMessage(text, isError = false) {
   showFallbackMessage._t = setTimeout(() => (el.style.display = "none"), 3000);
 }
 
-/* wrapper אחד לכל הפרויקט */
 function showMessage(text, isError = false) {
-  const type = isError ? "error" : "success";
-
-  // Try Zoho CRM built-in toast first
-  const usedToast = showZohoToast(text, type);
-  if (usedToast) return;
-
-  // fallback (אם רץ מחוץ ל-CRM / בלי ZDK)
+  // אם יש ZDK toast – נשתמש בו, אחרת fallback
+  try {
+    if (window.ZDK?.Client?.showMessage) {
+      ZDK.Client.showMessage(String(text), {
+        type: isError ? "error" : "success",
+      });
+      return;
+    }
+  } catch (e) {}
   showFallbackMessage(text, isError);
 }
 
-/* ===== UI helpers ===== */
 function showEmptyState(text) {
   const empty = document.getElementById("empty-state");
   const body = document.getElementById("file-listing-body");
@@ -274,7 +275,7 @@ function renderSkeletonRows(count = 7) {
   tbody.innerHTML = html;
 }
 
-/* ===== Breadcrumbs (Root is ICON) ===== */
+/* ===== Breadcrumbs ===== */
 function renderBreadcrumbs() {
   const wrap = document.getElementById("breadcrumbs");
   if (!wrap) return;
@@ -292,7 +293,9 @@ function renderBreadcrumbs() {
 
   if (!atRoot) {
     rootCrumb.onclick = async () => {
-      breadcrumbStack = [{ id: rootFolderId, name: "root" }];
+      breadcrumbStack = [
+        { id: rootFolderId, name: breadcrumbStack[0]?.name || "תיקייה" },
+      ];
       renderBreadcrumbs();
       await loadFolder(rootFolderId, false);
     };
@@ -330,21 +333,104 @@ async function navigateToFolder(folderId) {
   await loadFolder(folderId, false);
 }
 
-/* ===== WorkDrive API ===== */
-async function getItemInfo(itemId) {
-  const resp = await workDriveZrc.get(`/files/${itemId}`, {
-    headers: { Accept: "application/vnd.api+json" },
-  });
-  const data = await safeParseZrcData(resp);
-  return data?.data || null;
+/** ===========================
+ * ✅ WorkDrive – 2 דרכים:
+ * Desktop: ZRC
+ * Mobile: פונקציה
+ * =========================== */
+
+function getZohoApiDomainFromHost() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  const map = [
+    [".zoho.eu", "https://www.zohoapis.eu"],
+    [".zoho.in", "https://www.zohoapis.in"],
+    [".zoho.com.au", "https://www.zohoapis.com.au"],
+    [".zoho.jp", "https://www.zohoapis.jp"],
+    [".zohocloud.ca", "https://www.zohoapis.ca"],
+    [".zoho.com.cn", "https://www.zohoapis.com.cn"],
+    [".zoho.sa", "https://www.zohoapis.sa"],
+    [".zoho.com", "https://www.zohoapis.com"],
+  ];
+  for (const [suffix, api] of map) {
+    if (host.endsWith(suffix)) return api;
+  }
+  return "https://www.zohoapis.com";
 }
 
-async function listFolderItems(folderId) {
-  const resp = await workDriveZrc.get(`/files/${folderId}/files`, {
-    headers: { Accept: "application/vnd.api+json" },
+function initWorkDriveZrcIfPossible() {
+  // במובייל לא נשתמש בזה בכלל
+  if (isProbablyMobile()) return;
+
+  if (typeof zrc === "undefined" || !zrc?.createInstance) return;
+
+  const apiDomain = getZohoApiDomainFromHost();
+  workDriveZrc = zrc.createInstance({
+    baseUrl: `${apiDomain}/workdrive/api/v1`,
+    connection: WORKDRIVE_CONNECTION,
   });
-  const data = await safeParseZrcData(resp);
-  return Array.isArray(data?.data) ? data.data : [];
+}
+
+async function executeFunctionGetProjectFiles(folderId) {
+  // Zoho דורש arguments כמחרוזת JSON
+  const req_data = {
+    arguments: JSON.stringify({ folder_id: String(folderId) }),
+  };
+
+  // זה המפתח במובייל
+  const resp = await withTimeout(
+    ZOHO.CRM.FUNCTIONS.execute(FUNC_API_NAME, req_data),
+    15000,
+    "Function timeout",
+  );
+
+  // בדרך כלל התשובה יושבת ב- details.output (string)
+  const outStr =
+    resp?.details?.output ?? resp?.details?.Output ?? resp?.details ?? resp;
+  const parsed = typeof outStr === "string" ? JSON.parse(outStr) : outStr;
+
+  // אם החזרת crmAPIResponse (כמו בקוד שנתתי)
+  const body = parsed?.crmAPIResponse?.body ?? parsed?.body ?? parsed;
+
+  if (!body || body.ok !== true) {
+    const err = body?.error || "function_failed";
+    throw new Error(err);
+  }
+
+  return {
+    folder: body.folder || null,
+    items: Array.isArray(body.items) ? body.items : [],
+  };
+}
+
+async function listFolderItems(folderId, needFolderInfo) {
+  // מובייל: רק פונקציה
+  if (isProbablyMobile()) {
+    return await executeFunctionGetProjectFiles(folderId);
+  }
+
+  // Desktop: ZRC (כמו שהיה)
+  if (!workDriveZrc) {
+    throw new Error("workDriveZrc not initialized");
+  }
+
+  const headers = { Accept: "application/vnd.api+json" };
+
+  const listResp = await workDriveZrc.get(`/files/${folderId}/files`, {
+    headers,
+  });
+  const listData = await safeParseZrcData(listResp);
+  const items = Array.isArray(listData?.data) ? listData.data : [];
+
+  let folder = null;
+  if (needFolderInfo) {
+    const folderResp = await workDriveZrc.get(`/files/${folderId}`, {
+      headers,
+    });
+    const folderData = await safeParseZrcData(folderResp);
+    folder = folderData?.data || null;
+  }
+
+  return { folder, items };
 }
 
 /* ===== Render table ===== */
@@ -360,7 +446,6 @@ function renderTable(items) {
     return;
   }
 
-  // folders first
   const sorted = [...items].sort((a, b) => {
     const af =
       a?.attributes?.is_folder === true ||
@@ -433,18 +518,14 @@ async function onItemClick(item) {
 /* ===== Folder loading ===== */
 async function loadFolder(folderId, isRoot) {
   currentFolderId = folderId;
-
-  // show skeleton immediately
   renderSkeletonRows(7);
 
   try {
-    const items = await listFolderItems(folderId);
+    const { folder, items } = await listFolderItems(folderId, isRoot);
 
     if (isRoot && breadcrumbStack.length === 0) {
-      const info = await getItemInfo(folderId);
-      breadcrumbStack = [
-        { id: folderId, name: info?.attributes?.name || "תיקייה" },
-      ];
+      const name = folder?.attributes?.name || "תיקייה";
+      breadcrumbStack = [{ id: folderId, name }];
     }
 
     renderBreadcrumbs();
@@ -452,7 +533,7 @@ async function loadFolder(folderId, isRoot) {
   } catch (e) {
     console.error(e);
     showEmptyState("שגיאה בטעינת התיקייה");
-    showMessage("משהו השתבש בטעינה", true);
+    showMessage("שגיאה בטעינת התיקייה", true);
   }
 }
 
@@ -460,6 +541,12 @@ async function loadFolder(folderId, isRoot) {
 function wireUploadUI() {
   const btnFiles = document.getElementById("btn-upload-files");
   const inputFiles = document.getElementById("file-upload");
+
+  // במובייל עדיף לכבות את העלאה (לא יציב בתוך ה-app)
+  if (isProbablyMobile()) {
+    if (btnFiles) btnFiles.style.display = "none";
+    return;
+  }
 
   if (btnFiles && inputFiles) {
     btnFiles.addEventListener("click", () => inputFiles.click());
@@ -470,10 +557,14 @@ function wireUploadUI() {
   }
 }
 
-/* ===== Upload (LIKE HIS WORKING LOGIC) ===== */
+/* ===== Upload (Desktop only) ===== */
 async function uploadFiles(fileList) {
   if (isUploading) return;
   if (!fileList || fileList.length === 0) return;
+  if (!workDriveZrc) {
+    showMessage("Upload לא זמין כרגע", true);
+    return;
+  }
 
   isUploading = true;
 
@@ -483,7 +574,7 @@ async function uploadFiles(fileList) {
     let failCount = 0;
 
     for (const f of files) {
-      const ok = await uploadSingleFileToWorkDrive_likeHis(f, currentFolderId);
+      const ok = await uploadSingleFileToWorkDrive(f, currentFolderId);
       if (ok) successCount++;
       else failCount++;
     }
@@ -501,18 +592,12 @@ async function uploadFiles(fileList) {
   }
 }
 
-async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
+async function uploadSingleFileToWorkDrive(file, folderId) {
   const fileName = file?.name || "file";
-
-  // same filename validation as his code
   const format = /[`^+\=\[\]{};"\\<>\/]/;
-  if (format.test(fileName)) {
-    console.error("Invalid file name:", fileName);
-    return false;
-  }
+  if (format.test(fileName)) return false;
 
   try {
-    // EXACTLY like his upload: Blob + multipart header + formdata content=blob
     const fileBlob = new Blob([file], {
       type: file?.type || "application/octet-stream",
     });
@@ -527,7 +612,6 @@ async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
     });
 
     const parsed = await safeParseZrcData(uploadResponse);
-
     const ok =
       uploadResponse?.status === 200 ||
       uploadResponse?.status === 201 ||
@@ -535,72 +619,61 @@ async function uploadSingleFileToWorkDrive_likeHis(file, folderId) {
       parsed?.code === "SUCCESS" ||
       !!parsed?.data;
 
-    if (!ok) console.warn("Upload failed response:", uploadResponse, parsed);
-
     return !!ok;
   } catch (error) {
-    console.error("Error uploading file:", fileName, error);
+    console.error("Upload error:", error);
     return false;
   }
 }
 
-/* ===== Detect correct Zoho API domain (DC) ===== */
-function getZohoApiDomainFromHost() {
-  const host = String(window.location.hostname || "").toLowerCase();
-
-  const map = [
-    [".zoho.eu", "https://www.zohoapis.eu"],
-    [".zoho.in", "https://www.zohoapis.in"],
-    [".zoho.com.au", "https://www.zohoapis.com.au"],
-    [".zoho.jp", "https://www.zohoapis.jp"],
-    [".zohocloud.ca", "https://www.zohoapis.ca"],
-    [".zoho.com.cn", "https://www.zohoapis.com.cn"],
-    [".zoho.sa", "https://www.zohoapis.sa"],
-    [".zoho.com", "https://www.zohoapis.com"],
-  ];
-
-  for (const [suffix, api] of map) {
-    if (host.endsWith(suffix)) return api;
+/** ===== CRM record fetch (כדי להביא projectFolderId) ===== */
+async function getCrmRecord(entity, recordId) {
+  // אם ZRC קיים (דסקטופ) – נשתמש בו
+  if (!isProbablyMobile() && typeof zrc !== "undefined" && zrc?.get) {
+    const crmResp = await zrc.get(`/crm/v8/${entity}/${recordId}`);
+    const crmData = await safeParseZrcData(crmResp);
+    return crmData?.data?.[0] || null;
   }
-  return "https://www.zohoapis.com";
+
+  // מובייל: SDK
+  const resp = await ZOHO.CRM.API.getRecord({
+    Entity: entity,
+    RecordID: recordId,
+  });
+  const row = resp?.data?.[0] || null;
+  return row;
 }
 
 /* ===== Zoho init ===== */
 ZOHO.embeddedApp.on("PageLoad", async function (data) {
   try {
-    const apiDomain = getZohoApiDomainFromHost();
-
-    workDriveZrc = zrc.createInstance({
-      baseUrl: `${apiDomain}/workdrive/api/v1`,
-      connection: "zohoworkdrive", // ⬅️ השארתי כמו אצלך
-    });
-
     wireUploadUI();
+    initWorkDriveZrcIfPossible();
 
     currentRecordId = data.EntityId;
     currentEntity = data.Entity;
 
-    const crmResp = await zrc.get(
-      `/crm/v8/${currentEntity}/${currentRecordId}`,
+    const row = await withTimeout(
+      getCrmRecord(currentEntity, currentRecordId),
+      15000,
+      "CRM getRecord timeout",
     );
-    const crmData = await safeParseZrcData(crmResp);
-    const row = crmData?.data?.[0];
 
-    // ⬅️ השארתי כמו אצלך
-    const folderId = row?.projectFolderId;
+    const folderId = row?.[CRM_FOLDER_FIELD];
     if (!folderId) {
       showEmptyState("אין תיקיית WorkDrive מקושרת לרשומה הזאת");
       return;
     }
 
-    rootFolderId = folderId;
-    currentFolderId = folderId;
+    rootFolderId = String(folderId).trim();
+    currentFolderId = rootFolderId;
+    breadcrumbStack = []; // יתמלא ב-loadFolder
 
     await loadFolder(rootFolderId, true);
   } catch (e) {
     console.error("PageLoad error:", e);
     showEmptyState("שגיאה בטעינה");
-    showMessage("שגיאה בהתחברות ל-Zoho/WorkDrive", true);
+    showMessage("שגיאה בהתחברות/טעינה", true);
   }
 });
 

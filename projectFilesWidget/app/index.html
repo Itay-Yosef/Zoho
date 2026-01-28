@@ -10,7 +10,6 @@
     <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
 
     <style>
-      /* ===== Arial everywhere ===== */
       html,
       body,
       button,
@@ -39,7 +38,7 @@
       }
 
       body {
-        overflow: hidden; /* scroll inside table area */
+        overflow: hidden;
       }
 
       .widget {
@@ -49,14 +48,13 @@
         background: #ffffff;
       }
 
-      /* ===== Top Bar (NO border-bottom) ===== */
       .topbar {
         position: sticky;
         top: 0;
         z-index: 1000;
         background: #ffffff;
 
-        padding: 0; /* no side padding */
+        padding: 0;
         min-height: 46px;
 
         display: flex;
@@ -64,7 +62,7 @@
         gap: 12px;
 
         direction: rtl;
-        border-bottom: none; /* IMPORTANT */
+        border-bottom: none;
       }
 
       .right-block {
@@ -141,7 +139,7 @@
       }
 
       .actions {
-        margin-right: auto; /* RTL pushes actions to LEFT */
+        margin-right: auto;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -173,7 +171,6 @@
         display: none;
       }
 
-      /* (fallback only) - אם ZDK לא זמין */
       .message {
         display: none;
         padding: 8px 12px;
@@ -274,7 +271,6 @@
         display: none;
       }
 
-      /* ===== Skeleton Loading ===== */
       .skel {
         position: relative;
         overflow: hidden;
@@ -346,7 +342,6 @@
         </div>
       </div>
 
-      <!-- fallback only -->
       <div class="message" id="message"></div>
 
       <div class="table-wrap">
