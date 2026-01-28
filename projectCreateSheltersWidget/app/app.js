@@ -1,17 +1,4 @@
 ﻿// app.js
-"use strict";
-
-/**
- * למה לא קיבלת recordId מהכפתור?
- * בכפתור Zoho ב-Detail View, ה-PageLoad מחזיר לרוב data.EntityId כ-Array(1) (למשל ["123"]).
- * ב-Related List זה הרבה פעמים string ("123").
- * לכן חייבים לנרמל: אם Array -> לקחת [0]. (זה בדיוק התיקון כאן.)
- *
- * למה "Parentwindow reference not found"?
- * זה קורה כשפותחים את ה-widget כעמוד רגיל (URL) ולא מתוך Zoho CRM (iframe).
- * הפתרון: לוודא שהכפתור הוא "Open a Widget" ולא "Open URL",
- * או לכל הפחות להעביר recordId ב-URL ולדעת שה-SDK לא יעבוד מחוץ ל-Zoho.
- */
 
 /***********************
  * CONFIG (API Names)
@@ -19,26 +6,30 @@
 const PROJECTS_MODULE_API = "projects";
 const SHELTERS_MODULE_API = "shelters";
 
-const PROJECT_NAME_FIELD_API = "Name";
-const PROJECT_SPLIT_NAME_FIELD_API = "projectSplitName";
-const PROJECT_SPLIT_ADDR_FIELD_API = "projectSplitAddress";
+// Projects
+const PROJECT_NAME_FIELD_API = "projectPremitHolder";
+const PROJECT_SPLIT_NAME_FIELD_API = "projectIsNameSplit";
+const PROJECT_SPLIT_ADDR_FIELD_API = "projectIsAddressSplit";
 
 const PROJECT_CITY_API = "projectCity";
 const PROJECT_STREET_API = "projectStreet";
-const PROJECT_NUMBER_API = "projectNumber";
-const PROJECT_GUSH_API = "projectGush";
-const PROJECT_HELKA_API = "projectHelka";
-const PROJECT_MIGRASH_API = "projectMigrash";
+const PROJECT_NUMBER_API = "projectHouse";
+const PROJECT_GUSH_API = "projectBlock";
+const PROJECT_HELKA_API = "projectParcel";
+const PROJECT_MIGRASH_API = "projectLot";
 
 // Shelters
 const SHELTER_PROJECT_LOOKUP_API = "shelterProject";
-const SHELTER_OWNER_NAME_API = "shelterOwnerName";
+const SHELTER_NAME_API = "Name"; // <-- חדש לפי בקשתך
+const SHELTER_LOCATION_API = "shelterLocation"; // <-- חדש לפי בקשתך
+
+const SHELTER_OWNER_NAME_API = "shelterPermitHolder";
 
 const SHELTER_STREET_API = "shelterStreet";
-const SHELTER_NUMBER_API = "shelterNumber";
-const SHELTER_GUSH_API = "shelterGush";
-const SHELTER_HELKA_API = "shelterHelka";
-const SHELTER_MIGRASH_API = "shelterMigrash";
+const SHELTER_NUMBER_API = "shelterHouse";
+const SHELTER_GUSH_API = "shelterBlock";
+const SHELTER_HELKA_API = "shelterParcel";
+const SHELTER_MIGRASH_API = "shelterLot";
 
 const SHELTER_ENTRANCE_API = "shelterEntrance";
 const SHELTER_FLOOR_API = "shelterFloor";
@@ -46,55 +37,72 @@ const SHELTER_APARTMENT_API = "shelterApartment";
 const SHELTER_REMARKS_API = "shelterRemarks";
 
 /***********************
- * UI / STATE
+ * UI: Elements
  ***********************/
 const el = {
   banner: document.getElementById("banner"),
-  title: document.getElementById("title"),
+  bannerMsg: document.getElementById("bannerMsg"),
+  bannerClose: document.getElementById("bannerClose"),
+
+  headerTitle: document.getElementById("headerTitle"),
+  headerSubtitle: document.getElementById("headerSubtitle"),
   metaCity: document.getElementById("metaCity"),
   metaAddr: document.getElementById("metaAddr"),
+  modeLabel: document.getElementById("modeLabel"),
 
-  toggleSplitName: document.getElementById("toggleSplitName"),
-  toggleSplitAddr: document.getElementById("toggleSplitAddr"),
-
-  btnFillNames: document.getElementById("btnFillNames"),
-  btnFillAddr: document.getElementById("btnFillAddr"),
-
+  btnRefresh: document.getElementById("btnRefresh"),
   btnAdd: document.getElementById("btnAdd"),
   btnDelete: document.getElementById("btnDelete"),
   btnSave: document.getElementById("btnSave"),
-  btnRefresh: document.getElementById("btnRefresh"),
+  dirtyHint: document.getElementById("dirtyHint"),
 
-  chkAll: document.getElementById("chkAll"),
-  loading: document.getElementById("loading"),
-  empty: document.getElementById("empty"),
+  toggleSplitName: document.getElementById("toggleSplitName"),
+  toggleSplitAddr: document.getElementById("toggleSplitAddr"),
+  btnFillName: document.getElementById("btnFillName"),
+  btnFillAddr: document.getElementById("btnFillAddr"),
+
+  centerState: document.getElementById("centerState"),
   grid: document.getElementById("grid"),
-  tbody: document.getElementById("tbody"),
+  gridHead: document.getElementById("gridHead"),
+  gridBody: document.getElementById("gridBody"),
+  tableScroll: document.getElementById("tableScroll"),
+
+  modalBackdrop: document.getElementById("modalBackdrop"),
+  modalTitle: document.getElementById("modalTitle"),
+  modalBody: document.getElementById("modalBody"),
+  modalActions: document.getElementById("modalActions"),
+  modalX: document.getElementById("modalX"),
 };
 
+/***********************
+ * State
+ ***********************/
 const state = {
-  started: false,
-  insideZoho: typeof window.ZOHO !== "undefined",
-
   projectId: null,
+  loadStarted: false,
+
   project: null,
+  shelters: [], // visible rows
+  deleted: [], // rows pending delete (existing rows only)
+  tmpCounter: 1,
 
-  shelters: [],
-  originalById: new Map(), // snapshot for dirty compare
-
-  // desired UI flags
+  // UI toggles (draft until save)
   splitName: false,
   splitAddr: false,
 
-  // persisted flags in CRM (last known)
-  splitNamePersisted: false,
-  splitAddrPersisted: false,
+  // Track original split flags (from CRM) to know if project needs update
+  originalSplitName: false,
+  originalSplitAddr: false,
 
-  // selection
-  selectedIds: new Set(),
+  // Active edit cell: { rowId, field } (for single-field cells)
+  activeCell: null,
 
-  // save/pending
-  saving: false,
+  // For address subfields: { rowId, field } also works
+  // Dirty indicator
+  isDirty: false,
+
+  // Loading state
+  view: "loading", // loading | list | empty | error
 };
 
 /***********************
@@ -104,9 +112,456 @@ function safeStr(v) {
   if (v === null || v === undefined) return "";
   return String(v);
 }
-function norm(v) {
-  return safeStr(v).trim();
+
+function normalizeIdFromEntityId(entityId) {
+  if (!entityId) return null;
+  if (Array.isArray(entityId)) return entityId[0] ? String(entityId[0]) : null;
+  return String(entityId);
 }
+
+function getUrlRecordId() {
+  try {
+    const u = new URL(window.location.href);
+    const v = u.searchParams.get("recordId") || u.searchParams.get("RecordID");
+    return v ? String(v) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function setBanner(type, msg) {
+  el.banner.classList.remove("info", "ok", "warn", "danger", "show");
+  el.banner.classList.add(type, "show");
+  el.bannerMsg.textContent = msg;
+}
+
+function clearBanner() {
+  el.banner.classList.remove("show");
+  el.bannerMsg.textContent = "";
+}
+
+function openModal({ title, bodyHtml, actions }) {
+  el.modalTitle.textContent = title || "";
+  el.modalBody.innerHTML = bodyHtml || "";
+  el.modalActions.innerHTML = "";
+  (actions || []).forEach((a) => {
+    const btn = document.createElement("button");
+    btn.className = `btn ${a.variant || ""}`.trim();
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => a.onClick && a.onClick());
+    el.modalActions.appendChild(btn);
+  });
+  el.modalBackdrop.classList.add("show");
+  el.modalBackdrop.setAttribute("aria-hidden", "false");
+  resizeForUiState();
+}
+
+function closeModal() {
+  el.modalBackdrop.classList.remove("show");
+  el.modalBackdrop.setAttribute("aria-hidden", "true");
+  el.modalTitle.textContent = "";
+  el.modalBody.innerHTML = "";
+  el.modalActions.innerHTML = "";
+  resizeForUiState();
+}
+
+function confirmModal({
+  title,
+  message,
+  confirmText,
+  cancelText,
+  variant,
+  onConfirm,
+  onCancel,
+}) {
+  openModal({
+    title,
+    bodyHtml: `<div>${message}</div>`,
+    actions: [
+      {
+        label: cancelText || "ביטול",
+        onClick: () => {
+          closeModal();
+          onCancel && onCancel();
+        },
+      },
+      {
+        label: confirmText || "אישור",
+        variant: variant || "primary",
+        onClick: async () => {
+          closeModal();
+          onConfirm && (await onConfirm());
+        },
+      },
+    ],
+  });
+}
+
+function infoModal({ title, html, okText }) {
+  openModal({
+    title,
+    bodyHtml: html,
+    actions: [
+      {
+        label: okText || "סגור",
+        variant: "primary",
+        onClick: () => closeModal(),
+      },
+    ],
+  });
+}
+
+function isZohoReady() {
+  return !!(window.ZOHO && ZOHO.embeddedApp && ZOHO.CRM && ZOHO.CRM.API);
+}
+
+function resize(height) {
+  try {
+    if (ZOHO && ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Resize) {
+      return ZOHO.CRM.UI.Resize({ height });
+    }
+  } catch (_) {}
+  return Promise.resolve();
+}
+
+function computeDesiredHeight() {
+  // יותר גבוה כשיש עמודות פיצול / מודאל פתוח
+  const base = state.view === "loading" ? 520 : 980;
+
+  const extraForSplit =
+    (state.splitName ? 120 : 0) + (state.splitAddr ? 220 : 0);
+  const extraForModal = el.modalBackdrop.classList.contains("show") ? 120 : 0;
+
+  const h = base + extraForSplit + extraForModal;
+  return Math.max(520, Math.min(h, 1200));
+}
+
+function resizeOpen() {
+  return resize(1000);
+}
+
+function resizeAfterRender() {
+  const h = computeDesiredHeight();
+  return resize(h);
+}
+
+function resizeForUiState() {
+  // קטן ב-loading, גדול ב-list
+  const h = computeDesiredHeight();
+  return resize(h);
+}
+
+function setDirty(on) {
+  state.isDirty = !!on;
+  el.btnSave.disabled = !state.isDirty;
+  el.dirtyHint.textContent = state.isDirty ? "יש שינויים שלא נשמרו" : "";
+}
+
+function markDirty() {
+  if (!state.isDirty) setDirty(true);
+}
+
+function getProjectField(apiName) {
+  return state.project ? state.project[apiName] : null;
+}
+
+function projectAddressLine() {
+  const street = safeStr(getProjectField(PROJECT_STREET_API));
+  const number = safeStr(getProjectField(PROJECT_NUMBER_API));
+  const gush = safeStr(getProjectField(PROJECT_GUSH_API));
+  const helka = safeStr(getProjectField(PROJECT_HELKA_API));
+  const migrash = safeStr(getProjectField(PROJECT_MIGRASH_API));
+
+  const parts = [];
+  if (street || number)
+    parts.push(`רחוב ${street} ${number}`.replace(/\s+/g, " ").trim());
+  const ghm = [];
+  if (gush) ghm.push(`גוש ${gush}`);
+  if (helka) ghm.push(`חלקה ${helka}`);
+  if (migrash) ghm.push(`מגרש ${migrash}`);
+  if (ghm.length) parts.push(ghm.join(" | "));
+
+  return parts.length ? parts.join(" | ") : "—";
+}
+
+function modeLabel() {
+  if (state.splitName && state.splitAddr) return "פיצול שם + כתובת";
+  if (state.splitName) return "פיצול שם";
+  if (state.splitAddr) return "פיצול כתובת";
+  return "ללא פיצול";
+}
+
+/***********************
+ * Data mapping
+ ***********************/
+function createRowFromRecord(rec) {
+  const row = {
+    id: String(rec.id),
+    isNew: false,
+    pendingDelete: false,
+    selected: false,
+
+    fields: {
+      [SHELTER_NAME_API]: safeStr(rec[SHELTER_NAME_API]),
+      [SHELTER_LOCATION_API]: safeStr(rec[SHELTER_LOCATION_API]),
+      [SHELTER_ENTRANCE_API]: safeStr(rec[SHELTER_ENTRANCE_API]),
+      [SHELTER_FLOOR_API]: safeStr(rec[SHELTER_FLOOR_API]),
+      [SHELTER_APARTMENT_API]: safeStr(rec[SHELTER_APARTMENT_API]),
+      [SHELTER_REMARKS_API]: safeStr(rec[SHELTER_REMARKS_API]),
+
+      [SHELTER_OWNER_NAME_API]: safeStr(rec[SHELTER_OWNER_NAME_API]),
+
+      [SHELTER_STREET_API]: safeStr(rec[SHELTER_STREET_API]),
+      [SHELTER_NUMBER_API]: safeStr(rec[SHELTER_NUMBER_API]),
+      [SHELTER_GUSH_API]: safeStr(rec[SHELTER_GUSH_API]),
+      [SHELTER_HELKA_API]: safeStr(rec[SHELTER_HELKA_API]),
+      [SHELTER_MIGRASH_API]: safeStr(rec[SHELTER_MIGRASH_API]),
+    },
+
+    // For Zoho-like behavior: field stays as blue input if dirty
+    dirtyFields: new Set(),
+    invalid: false,
+  };
+
+  return row;
+}
+
+function createNewRow() {
+  const row = {
+    id: `tmp-${state.tmpCounter++}`,
+    isNew: true,
+    pendingDelete: false,
+    selected: false,
+    fields: {
+      [SHELTER_NAME_API]: "",
+      [SHELTER_LOCATION_API]: "",
+      [SHELTER_ENTRANCE_API]: "",
+      [SHELTER_FLOOR_API]: "",
+      [SHELTER_APARTMENT_API]: "",
+      [SHELTER_REMARKS_API]: "",
+
+      [SHELTER_OWNER_NAME_API]: "",
+
+      [SHELTER_STREET_API]: "",
+      [SHELTER_NUMBER_API]: "",
+      [SHELTER_GUSH_API]: "",
+      [SHELTER_HELKA_API]: "",
+      [SHELTER_MIGRASH_API]: "",
+    },
+    dirtyFields: new Set([SHELTER_NAME_API, SHELTER_FLOOR_API]), // כדי שיראו input כחול ישר
+    invalid: false,
+  };
+
+  // אם פיצול כתובת כבוי בזמן יצירה, עדיין נשמור בפרטי הרשומה על בסיס כתובת פרויקט בעת שמירה
+  // אם פיצול כתובת דלוק, אפשר למלא לפי כפתור Fill.
+
+  // אם פיצול שם כבוי, owner יידרס בעת שמירה; אם דלוק – המשתמש יכניס.
+  return row;
+}
+
+function findRow(rowId) {
+  return state.shelters.find((r) => r.id === rowId);
+}
+
+/***********************
+ * Zoho API calls
+ ***********************/
+async function zohoGetRecord(moduleApi, recordId) {
+  return ZOHO.CRM.API.getRecord({ Entity: moduleApi, RecordID: recordId });
+}
+
+async function zohoSearchAll(moduleApi, criteria, perPage = 200) {
+  const all = [];
+  let page = 1;
+  while (true) {
+    const res = await ZOHO.CRM.API.searchRecord({
+      Entity: moduleApi,
+      Type: "criteria",
+      Query: criteria,
+      page,
+      per_page: perPage,
+    });
+
+    const data = res && res.data ? res.data : [];
+    all.push(...data);
+
+    const more = res && res.info && res.info.more_records;
+    if (!more) break;
+    page += 1;
+  }
+  return all;
+}
+
+async function zohoUpdateRecord(moduleApi, apiData) {
+  return ZOHO.CRM.API.updateRecord({ Entity: moduleApi, APIData: apiData });
+}
+
+async function zohoInsertRecord(moduleApi, apiData) {
+  return ZOHO.CRM.API.insertRecord({ Entity: moduleApi, APIData: apiData });
+}
+
+async function zohoDeleteRecord(moduleApi, recordId) {
+  return ZOHO.CRM.API.deleteRecord({ Entity: moduleApi, RecordID: recordId });
+}
+
+/***********************
+ * Load
+ ***********************/
+async function loadAll() {
+  state.view = "loading";
+  render();
+  resizeForUiState();
+
+  try {
+    // Project
+    const pr = await zohoGetRecord(PROJECTS_MODULE_API, state.projectId);
+    const projectRec = pr && pr.data && pr.data[0] ? pr.data[0] : null;
+    if (!projectRec) throw new Error("Project not found");
+
+    state.project = projectRec;
+
+    // split flags from CRM
+    state.originalSplitName = !!projectRec[PROJECT_SPLIT_NAME_FIELD_API];
+    state.originalSplitAddr = !!projectRec[PROJECT_SPLIT_ADDR_FIELD_API];
+    state.splitName = state.originalSplitName;
+    state.splitAddr = state.originalSplitAddr;
+
+    // Shelters by criteria (lookup)
+    const criteria = `(${SHELTER_PROJECT_LOOKUP_API}:equals:${state.projectId})`;
+    const shelters = await zohoSearchAll(SHELTERS_MODULE_API, criteria, 200);
+
+    state.shelters = shelters.map(createRowFromRecord);
+    state.deleted = [];
+
+    // reset dirty
+    setDirty(false);
+    state.activeCell = null;
+
+    state.view = state.shelters.length ? "list" : "empty";
+    clearBanner();
+  } catch (err) {
+    state.view = "error";
+    setBanner(
+      "danger",
+      `שגיאה בטעינה: ${safeStr(err && err.message ? err.message : err)}`,
+    );
+  }
+
+  render();
+  resizeAfterRender();
+}
+
+/***********************
+ * Render
+ ***********************/
+function setCenter(text) {
+  el.centerState.textContent = text;
+  el.centerState.style.display = "block";
+  el.grid.style.display = "none";
+}
+
+function showGrid() {
+  el.centerState.style.display = "none";
+  el.grid.style.display = "table";
+}
+
+function renderHeader() {
+  const projectName = safeStr(getProjectField(PROJECT_NAME_FIELD_API)) || "—";
+  const city = safeStr(getProjectField(PROJECT_CITY_API)) || "—";
+
+  el.headerTitle.textContent = `[${projectName}]`;
+  el.headerSubtitle.textContent = `[כתובת הפרויקט]`;
+
+  el.metaCity.textContent = `עיר: ${city}`;
+  el.metaAddr.textContent = `כתובת פרויקט: ${projectAddressLine()}`;
+  el.modeLabel.textContent = modeLabel();
+
+  // toggles
+  el.toggleSplitName.checked = !!state.splitName;
+  el.toggleSplitAddr.checked = !!state.splitAddr;
+
+  // fill buttons
+  el.btnFillName.style.display = state.splitName ? "inline-block" : "none";
+  el.btnFillAddr.style.display = state.splitAddr ? "inline-block" : "none";
+}
+
+function th(label, extraClass = "") {
+  return `<th class="${extraClass}">${label}</th>`;
+}
+
+function renderHead() {
+  // order like your sketch (checkbox at far right)
+  const cols = [];
+
+  cols.push(th("בחירה", "col-select"));
+
+  cols.push(th("מיקום ממד"));
+  cols.push(th("כניסה"));
+  cols.push(th(`קומה <span class="req">*</span>`));
+  cols.push(th("דירה"));
+  cols.push(th(`שם <span class="req">*</span>`)); // Shelter Name
+
+  if (state.splitName) cols.push(th(`שם בעל היתר <span class="req">*</span>`));
+
+  if (state.splitAddr) cols.push(th("כתובת"));
+
+  cols.push(th("הערות"));
+
+  el.gridHead.innerHTML = `<tr>${cols.join("")}</tr>`;
+}
+
+function isFieldEditable(fieldApi) {
+  // תמיד ניתן לערוך בעמודות הבסיס
+  // split columns editable רק כשהפיצול דלוק
+  if (fieldApi === SHELTER_OWNER_NAME_API) return !!state.splitName;
+  if (
+    fieldApi === SHELTER_STREET_API ||
+    fieldApi === SHELTER_NUMBER_API ||
+    fieldApi === SHELTER_GUSH_API ||
+    fieldApi === SHELTER_HELKA_API ||
+    fieldApi === SHELTER_MIGRASH_API
+  )
+    return !!state.splitAddr;
+
+  return true;
+}
+
+function shouldShowInput(row, fieldApi) {
+  if (!isFieldEditable(fieldApi)) return false; // hidden anyway
+  if (row.isNew) return true; // new rows are always editable in blue
+  if (row.dirtyFields.has(fieldApi)) return true; // keep blue input until save
+  if (
+    state.activeCell &&
+    state.activeCell.rowId === row.id &&
+    state.activeCell.field === fieldApi
+  )
+    return true;
+  return false;
+}
+
+function cellEditable(row, fieldApi, placeholder = "") {
+  const val = safeStr(row.fields[fieldApi]);
+  const editable = isFieldEditable(fieldApi);
+  const showInput = editable && shouldShowInput(row, fieldApi);
+
+  if (!editable) {
+    // not used currently (we hide split columns when off), but keep safe
+    return `<div class="cell-text muted" title="נלקח מהפרויקט">נלקח מהפרויקט</div>`;
+  }
+
+  if (showInput) {
+    return `<input class="z-input" data-row="${row.id}" data-field="${fieldApi}" value="${escapeHtml(val)}" placeholder="${escapeHtml(
+      placeholder,
+    )}" />`;
+  }
+
+  const text = val || "—";
+  const muted = val ? "" : " muted";
+  return `<div class="cell-text${muted}" data-activate="1" data-row="${row.id}" data-field="${fieldApi}" title="לחץ לעריכה">${escapeHtml(
+    text,
+  )}</div>`;
+}
+
 function escapeHtml(str) {
   return safeStr(str)
     .replaceAll("&", "&amp;")
@@ -115,972 +570,785 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-function getUrlParam(name) {
-  try {
-    const u = new URL(window.location.href);
-    return u.searchParams.get(name);
-  } catch {
-    return null;
+
+function renderAddressCell(row) {
+  const city = safeStr(getProjectField(PROJECT_CITY_API)) || "—";
+
+  // address fields are editable only when splitAddr is ON (and this column appears only then)
+  const street = cellEditable(row, SHELTER_STREET_API, "רחוב");
+  const number = cellEditable(row, SHELTER_NUMBER_API, "מספר");
+  const gush = cellEditable(row, SHELTER_GUSH_API, "גוש");
+  const helka = cellEditable(row, SHELTER_HELKA_API, "חלקה");
+  const migrash = cellEditable(row, SHELTER_MIGRASH_API, "מגרש");
+
+  return `
+    <div class="addr-box">
+      <div class="addr-row">
+        <div class="addr-label">רחוב</div>
+        ${street}
+      </div>
+      <div class="addr-row">
+        <div class="addr-label">עיר (מתוך הפרויקט)</div>
+        <div class="addr-ro">${escapeHtml(city)}</div>
+      </div>
+      <div class="addr-row">
+        <div class="addr-label">מספר</div>
+        ${number}
+      </div>
+      <div class="addr-row">
+        <div class="addr-label">גוש</div>
+        ${gush}
+      </div>
+      <div class="addr-row">
+        <div class="addr-label">חלקה</div>
+        ${helka}
+      </div>
+      <div class="addr-row">
+        <div class="addr-label">מגרש</div>
+        ${migrash}
+      </div>
+    </div>
+  `;
+}
+
+function renderBody() {
+  const rowsHtml = state.shelters
+    .filter((r) => !r.pendingDelete)
+    .map((row) => {
+      const cols = [];
+
+      cols.push(`
+        <td class="col-select">
+          <input type="checkbox" data-select="1" data-row="${row.id}" ${row.selected ? "checked" : ""} />
+        </td>
+      `);
+
+      cols.push(`<td>${cellEditable(row, SHELTER_LOCATION_API, "מיקום")}</td>`);
+      cols.push(`<td>${cellEditable(row, SHELTER_ENTRANCE_API, "כניסה")}</td>`);
+      cols.push(`<td>${cellEditable(row, SHELTER_FLOOR_API, "קומה")}</td>`);
+      cols.push(`<td>${cellEditable(row, SHELTER_APARTMENT_API, "דירה")}</td>`);
+      cols.push(`<td>${cellEditable(row, SHELTER_NAME_API, "שם")}</td>`);
+
+      if (state.splitName)
+        cols.push(
+          `<td>${cellEditable(row, SHELTER_OWNER_NAME_API, "שם בעל היתר")}</td>`,
+        );
+      if (state.splitAddr) cols.push(`<td>${renderAddressCell(row)}</td>`);
+
+      cols.push(`<td>${cellEditable(row, SHELTER_REMARKS_API, "הערות")}</td>`);
+
+      const trClass = row.invalid ? "row-invalid" : "";
+      return `<tr class="${trClass}" data-row-tr="${row.id}">${cols.join("")}</tr>`;
+    })
+    .join("");
+
+  el.gridBody.innerHTML = rowsHtml || "";
+}
+
+function render() {
+  renderHeader();
+
+  if (state.view === "loading") {
+    setCenter("טוען...");
+    el.btnDelete.style.display = "none";
+    resizeForUiState();
+    return;
   }
-}
-function getRecordIdFromUrl() {
-  // תומך גם recordId לפי הדרישה וגם fallbackים שכיחים
-  return (
-    getUrlParam("recordId") ||
-    getUrlParam("EntityId") ||
-    getUrlParam("entityId") ||
-    getUrlParam("id")
-  );
-}
 
-/**
- * זה התיקון הקריטי:
- * בכפתור (Detail View) data.EntityId יכול להיות Array(1), וברשימה/relatedList יכול להיות string.
- */
-function extractEntityIdFromPageLoad(data) {
-  if (!data) return null;
+  if (state.view === "error") {
+    setCenter("אירעה שגיאה. בדוק הודעה למעלה.");
+    el.btnDelete.style.display = "none";
+    resizeForUiState();
+    return;
+  }
 
-  const raw =
-    data.EntityId ??
-    data.EntityID ??
-    data.entityId ??
-    data.entityID ??
-    data.EntityIds ??
-    data.EntityIDs;
+  if (state.view === "empty") {
+    renderHead();
+    setCenter("אין ממדים לפרויקט.");
+    el.btnDelete.style.display = "none";
+    resizeForUiState();
+    return;
+  }
 
-  if (Array.isArray(raw)) return raw[0] || null;
-  if (typeof raw === "string" && raw.trim()) return raw.trim();
-  if (typeof raw === "number") return String(raw);
+  // list
+  renderHead();
+  showGrid();
+  renderBody();
 
-  // לפעמים מגיעים ערכים בצורה אחרת:
-  if (data?.EntityId && Array.isArray(data.EntityId))
-    return data.EntityId[0] || null;
+  // delete button show/hide
+  const selectedCount = state.shelters.filter(
+    (r) => r.selected && !r.pendingDelete,
+  ).length;
+  el.btnDelete.style.display = selectedCount > 0 ? "inline-flex" : "none";
 
-  return null;
-}
-
-function showBanner(type, msg) {
-  el.banner.className = `banner show ${type}`;
-  el.banner.innerHTML = escapeHtml(msg);
-}
-function clearBanner() {
-  el.banner.className = "banner";
-  el.banner.innerHTML = "";
-}
-
-function resize(height) {
-  try {
-    if (window.ZOHO?.CRM?.UI?.Resize) {
-      window.ZOHO.CRM.UI.Resize({ height });
+  // focus active input if exists
+  if (state.activeCell) {
+    const q = `input[data-row="${CSS.escape(state.activeCell.rowId)}"][data-field="${CSS.escape(state.activeCell.field)}"]`;
+    const input = document.querySelector(q);
+    if (input) {
+      input.focus();
+      input.select();
     }
-  } catch {
-    // ignore
-  }
-}
-function resizeFor(mode) {
-  if (mode === "loading") return resize(520);
-  if (mode === "list") return resize(1000);
-  return resize(900);
-}
-function resizeAfterRender() {
-  const h = Math.max(900, Math.min(1200, document.body.scrollHeight + 60));
-  resize(h);
-}
-
-function setLoading(isLoading) {
-  el.loading.style.display = isLoading ? "block" : "none";
-  el.grid.style.display = isLoading ? "none" : el.grid.style.display;
-  el.empty.style.display = "none";
-  resizeFor(isLoading ? "loading" : "list");
-}
-
-/***********************
- * Zoho API wrappers
- ***********************/
-async function zohoGetRecord(entity, id) {
-  const res = await ZOHO.CRM.API.getRecord({ Entity: entity, RecordID: id });
-  const rec = res?.data?.[0];
-  if (!rec) throw new Error("Record not found");
-  return rec;
-}
-
-async function zohoUpdateRecord(entity, id, fields) {
-  const APIData = { id, ...fields };
-  const res = await ZOHO.CRM.API.updateRecord({ Entity: entity, APIData });
-  const ok = res?.data?.[0]?.status === "success";
-  if (!ok) throw new Error(res?.data?.[0]?.message || "Update failed");
-  return res;
-}
-
-async function zohoInsertRecord(entity, fields) {
-  // Lookup: ננסה קודם אובייקט {id}, ואם זה נכשל ננסה string.
-  try {
-    const res = await ZOHO.CRM.API.insertRecord({
-      Entity: entity,
-      APIData: fields,
-    });
-    const ok = res?.data?.[0]?.status === "success";
-    if (!ok) throw new Error(res?.data?.[0]?.message || "Insert failed");
-    return res;
-  } catch (e) {
-    // fallback אם lookup הוגדר כמחרוזת
-    throw e;
-  }
-}
-
-async function zohoDeleteRecord(entity, id) {
-  const res = await ZOHO.CRM.API.deleteRecord({ Entity: entity, RecordID: id });
-  const ok = res?.data?.[0]?.status === "success";
-  if (!ok) throw new Error(res?.data?.[0]?.message || "Delete failed");
-  return res;
-}
-
-async function zohoSearchAll(entity, criteria, perPage = 200) {
-  const out = [];
-  let page = 1;
-
-  while (true) {
-    const res = await ZOHO.CRM.API.searchRecord(
-      { Entity: entity, Type: "criteria", Query: criteria },
-      page,
-      perPage,
-    );
-    const data = res?.data || [];
-    out.push(...data);
-
-    const more = !!res?.info?.more_records;
-    if (!more || data.length === 0) break;
-    page += 1;
-
-    // safety
-    if (page > 50) break;
   }
 
-  return out;
-}
-
-/***********************
- * Data formatting
- ***********************/
-function projectField(api) {
-  return state.project ? state.project[api] : "";
-}
-function projectName() {
-  return norm(projectField(PROJECT_NAME_FIELD_API));
-}
-function projectCity() {
-  return norm(projectField(PROJECT_CITY_API));
-}
-function formatProjectAddressLine() {
-  const street = norm(projectField(PROJECT_STREET_API));
-  const num = norm(projectField(PROJECT_NUMBER_API));
-  const gush = norm(projectField(PROJECT_GUSH_API));
-  const helka = norm(projectField(PROJECT_HELKA_API));
-  const migrash = norm(projectField(PROJECT_MIGRASH_API));
-
-  const parts = [];
-  if (street || num) parts.push(`רחוב ${street || "—"} ${num || ""}`.trim());
-  if (gush) parts.push(`גוש ${gush}`);
-  if (helka) parts.push(`חלקה ${helka}`);
-  if (migrash) parts.push(`מגרש ${migrash}`);
-  return parts.length ? parts.join(" | ") : "—";
-}
-
-function getShelterId(rec) {
-  return safeStr(rec.id);
-}
-function lookupId(val) {
-  if (!val) return "";
-  if (typeof val === "string") return val;
-  if (typeof val === "object" && val.id) return safeStr(val.id);
-  return "";
-}
-
-/***********************
- * Boot / recordId capture
- ***********************/
-function startWithProjectId(id, source) {
-  const pid = norm(id);
-  if (!pid) return;
-
-  if (state.started) return;
-  state.started = true;
-  state.projectId = pid;
-
-  clearBanner();
-  showBanner("info", `נטען פרויקט… (${source})`);
-  loadAll().catch((e) => {
-    showBanner("err", `שגיאה בטעינה: ${e.message || e}`);
-  });
-}
-
-function showNoIdError() {
-  showBanner("err", "לא התקבל מזהה פרויקט (recordId) מהכפתור");
-  setLoading(false);
-  el.grid.style.display = "none";
-  el.empty.style.display = "block";
-  resizeFor("list");
-}
-
-/***********************
- * Load
- ***********************/
-async function loadAll() {
-  setLoading(true);
-
-  state.project = await zohoGetRecord(PROJECTS_MODULE_API, state.projectId);
-
-  state.splitNamePersisted = !!state.project[PROJECT_SPLIT_NAME_FIELD_API];
-  state.splitAddrPersisted = !!state.project[PROJECT_SPLIT_ADDR_FIELD_API];
-
-  state.splitName = state.splitNamePersisted;
-  state.splitAddr = state.splitAddrPersisted;
-
-  // Load shelters by lookup
-  const crit1 = `(${SHELTER_PROJECT_LOOKUP_API}.id:equals:${state.projectId})`;
-  let shelters = [];
-  try {
-    shelters = await zohoSearchAll(SHELTERS_MODULE_API, crit1);
-  } catch {
-    // fallback (אם אצלך החיפוש ב-lookup לא צריך ".id")
-    const crit2 = `(${SHELTER_PROJECT_LOOKUP_API}:equals:${state.projectId})`;
-    shelters = await zohoSearchAll(SHELTERS_MODULE_API, crit2);
-  }
-
-  state.shelters = shelters;
-  state.originalById = new Map();
-  state.selectedIds = new Set();
-
-  for (const s of state.shelters) {
-    const id = getShelterId(s);
-    state.originalById.set(id, JSON.parse(JSON.stringify(s)));
-  }
-
-  renderAll();
-
-  // Resize after DOM render
-  setTimeout(resizeAfterRender, 0);
-
-  setLoading(false);
-
-  // empty state
-  if (state.shelters.length === 0) {
-    el.grid.style.display = "none";
-    el.empty.style.display = "block";
-  } else {
-    el.empty.style.display = "none";
-    el.grid.style.display = "table";
-  }
   resizeAfterRender();
 }
 
 /***********************
- * Render
+ * Validation (before save)
  ***********************/
-function renderAll() {
-  // Header
-  el.title.textContent = `ניהול ממדים לפרויקט: ${projectName() || "—"}`;
-  el.metaCity.textContent = `עיר: ${projectCity() || "—"}`;
-  el.metaAddr.textContent = `כתובת פרויקט: ${formatProjectAddressLine()}`;
+function validateRows() {
+  const problems = [];
 
-  // Toolbar
-  el.toggleSplitName.checked = !!state.splitName;
-  el.toggleSplitAddr.checked = !!state.splitAddr;
+  // reset invalid
+  state.shelters.forEach((r) => (r.invalid = false));
 
-  el.btnFillNames.style.display = state.splitName ? "inline-block" : "none";
-  el.btnFillAddr.style.display = state.splitAddr ? "inline-block" : "none";
+  const visible = state.shelters.filter((r) => !r.pendingDelete);
 
-  // Delete selected visibility
-  el.btnDelete.style.display = state.selectedIds.size ? "inline-block" : "none";
+  for (const row of visible) {
+    const rowProblems = [];
 
-  // Save enabled?
-  el.btnSave.disabled = !hasUnsavedChanges() || state.saving;
+    // Required now: only Floor + Name (and owner name if splitName ON)
+    const nameVal = safeStr(row.fields[SHELTER_NAME_API]).trim();
+    const floorVal = safeStr(row.fields[SHELTER_FLOOR_API]).trim();
 
-  // Table
-  el.tbody.innerHTML = "";
-  if (!state.shelters.length) return;
+    if (!nameVal) rowProblems.push("שם חסר");
+    if (!floorVal) rowProblems.push("קומה חסרה");
 
-  const rowsHtml = state.shelters.map(renderRow).join("");
-  el.tbody.innerHTML = rowsHtml;
+    if (state.splitName) {
+      const ownerVal = safeStr(row.fields[SHELTER_OWNER_NAME_API]).trim();
+      if (!ownerVal) rowProblems.push("שם בעל היתר חסר");
+    }
 
-  // bind input listeners (event delegation)
-  el.tbody.querySelectorAll("input[data-field]").forEach((inp) => {
-    inp.addEventListener("input", onCellEdit);
-  });
-  el.tbody.querySelectorAll("input[data-select]").forEach((chk) => {
-    chk.addEventListener("change", onRowSelect);
-  });
-  el.tbody.querySelectorAll("[data-open]").forEach((a) => {
-    a.addEventListener("click", onOpenRecord);
-  });
+    if (rowProblems.length) {
+      row.invalid = true;
+      problems.push({ row, issues: rowProblems });
+    }
+  }
 
-  // Check all
-  el.chkAll.checked =
-    state.selectedIds.size && state.selectedIds.size === state.shelters.length;
-}
-
-function renderRow(rec) {
-  const id = getShelterId(rec);
-
-  const entrance = norm(rec[SHELTER_ENTRANCE_API]);
-  const floor = norm(rec[SHELTER_FLOOR_API]);
-  const apt = norm(rec[SHELTER_APARTMENT_API]);
-
-  const remarks = norm(rec[SHELTER_REMARKS_API]);
-
-  // Display owner name
-  const ownerVal = state.splitName
-    ? norm(rec[SHELTER_OWNER_NAME_API])
-    : projectName();
-  const ownerReadOnly = !state.splitName;
-
-  // Display address (without city)
-  const streetVal = state.splitAddr
-    ? norm(rec[SHELTER_STREET_API])
-    : norm(projectField(PROJECT_STREET_API));
-  const numVal = state.splitAddr
-    ? norm(rec[SHELTER_NUMBER_API])
-    : norm(projectField(PROJECT_NUMBER_API));
-  const gushVal = state.splitAddr
-    ? norm(rec[SHELTER_GUSH_API])
-    : norm(projectField(PROJECT_GUSH_API));
-  const helkaVal = state.splitAddr
-    ? norm(rec[SHELTER_HELKA_API])
-    : norm(projectField(PROJECT_HELKA_API));
-  const migrashVal = state.splitAddr
-    ? norm(rec[SHELTER_MIGRASH_API])
-    : norm(projectField(PROJECT_MIGRASH_API));
-
-  const addrReadOnly = !state.splitAddr;
-
-  const badgeOwner = ownerReadOnly
-    ? `<span class="pill">נלקח מהפרויקט</span>`
-    : "";
-  const badgeAddr = addrReadOnly
-    ? `<span class="pill">נלקח מהפרויקט</span>`
-    : "";
-
-  return `
-    <tr>
-      <td>
-        <input type="checkbox" data-select="1" data-id="${escapeHtml(id)}" ${state.selectedIds.has(id) ? "checked" : ""}/>
-      </td>
-
-      <td>
-        <div>
-          <a class="link" data-open="1" data-id="${escapeHtml(id)}">פתח רקורד</a>
-          <div class="muted" style="font-size:11px;margin-top:4px;">${escapeHtml(id)}</div>
-        </div>
-      </td>
-
-      <td>
-        <div class="grid2">
-          <div><span class="muted">כניסה:</span> ${escapeHtml(entrance || "—")}</div>
-          <div><span class="muted">קומה:</span> ${escapeHtml(floor || "—")}</div>
-          <div><span class="muted">דירה:</span> ${escapeHtml(apt || "—")}</div>
-        </div>
-      </td>
-
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${
-            ownerReadOnly
-              ? `<span>${escapeHtml(ownerVal || "—")}</span>${badgeOwner}`
-              : `<input type="text" data-field="${escapeHtml(SHELTER_OWNER_NAME_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(ownerVal)}" placeholder="שם לממד" />`
-          }
-        </div>
-      </td>
-
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-          ${addrReadOnly ? `<span class="muted">${badgeAddr}</span>` : ""}
-        </div>
-        <div class="grid2">
-          <div>
-            <span class="muted">רחוב</span>
-            ${
-              addrReadOnly
-                ? `<div>${escapeHtml(streetVal || "—")}</div>`
-                : `<input type="text" data-field="${escapeHtml(SHELTER_STREET_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(streetVal)}" />`
-            }
-          </div>
-          <div>
-            <span class="muted">מספר</span>
-            ${
-              addrReadOnly
-                ? `<div>${escapeHtml(numVal || "—")}</div>`
-                : `<input type="text" data-field="${escapeHtml(SHELTER_NUMBER_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(numVal)}" />`
-            }
-          </div>
-          <div>
-            <span class="muted">גוש</span>
-            ${
-              addrReadOnly
-                ? `<div>${escapeHtml(gushVal || "—")}</div>`
-                : `<input type="text" data-field="${escapeHtml(SHELTER_GUSH_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(gushVal)}" />`
-            }
-          </div>
-          <div>
-            <span class="muted">חלקה</span>
-            ${
-              addrReadOnly
-                ? `<div>${escapeHtml(helkaVal || "—")}</div>`
-                : `<input type="text" data-field="${escapeHtml(SHELTER_HELKA_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(helkaVal)}" />`
-            }
-          </div>
-          <div>
-            <span class="muted">מגרש</span>
-            ${
-              addrReadOnly
-                ? `<div>${escapeHtml(migrashVal || "—")}</div>`
-                : `<input type="text" data-field="${escapeHtml(SHELTER_MIGRASH_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(migrashVal)}" />`
-            }
-          </div>
-        </div>
-      </td>
-
-      <td>
-        <input type="text" data-field="${escapeHtml(SHELTER_REMARKS_API)}" data-id="${escapeHtml(id)}" value="${escapeHtml(remarks)}" placeholder="הערות..." />
-      </td>
-    </tr>
-  `;
+  return problems;
 }
 
 /***********************
- * Dirty / changes
+ * Split logic (UI)
  ***********************/
-function getOriginal(id) {
-  return state.originalById.get(id) || null;
+function onToggleSplitName(newVal) {
+  const was = state.splitName;
+  state.splitName = !!newVal;
+
+  // אם עוברים OFF -> ON: לפי הבקשה שלך, העמודה נפתחת "ריקה" וחייבים למלא
+  if (!was && state.splitName) {
+    state.shelters.forEach((r) => {
+      if (r.pendingDelete) return;
+      r.fields[SHELTER_OWNER_NAME_API] = "";
+      r.dirtyFields.add(SHELTER_OWNER_NAME_API);
+    });
+    markDirty();
+  }
+
+  // אם עוברים ON -> OFF: לא מוחקים כלום עכשיו. הדריסה תקרה רק ב-Save (כמו שביקשת)
+  if (was && !state.splitName) {
+    // אין צורך לסמן dirty לכל שורה עכשיו; מספיק שמצב הפרויקט השתנה
+    markDirty();
+  }
+
+  render();
 }
-function fieldsEqual(a, b) {
-  return norm(a) === norm(b);
+
+function onToggleSplitAddr(newVal) {
+  const was = state.splitAddr;
+  state.splitAddr = !!newVal;
+
+  // אם עוברים OFF -> ON: נפתח כתובת עם ערכי הפרויקט כברירת מחדל (כדי לא להתחיל מ-null)
+  if (!was && state.splitAddr) {
+    const pStreet = safeStr(getProjectField(PROJECT_STREET_API));
+    const pNumber = safeStr(getProjectField(PROJECT_NUMBER_API));
+    const pGush = safeStr(getProjectField(PROJECT_GUSH_API));
+    const pHelka = safeStr(getProjectField(PROJECT_HELKA_API));
+    const pMigrash = safeStr(getProjectField(PROJECT_MIGRASH_API));
+
+    state.shelters.forEach((r) => {
+      if (r.pendingDelete) return;
+
+      // רק אם ריק – למלא מהפרויקט (כדי לא לדרוס אם כבר היה פיצול בעבר)
+      if (!safeStr(r.fields[SHELTER_STREET_API]).trim())
+        r.fields[SHELTER_STREET_API] = pStreet;
+      if (!safeStr(r.fields[SHELTER_NUMBER_API]).trim())
+        r.fields[SHELTER_NUMBER_API] = pNumber;
+      if (!safeStr(r.fields[SHELTER_GUSH_API]).trim())
+        r.fields[SHELTER_GUSH_API] = pGush;
+      if (!safeStr(r.fields[SHELTER_HELKA_API]).trim())
+        r.fields[SHELTER_HELKA_API] = pHelka;
+      if (!safeStr(r.fields[SHELTER_MIGRASH_API]).trim())
+        r.fields[SHELTER_MIGRASH_API] = pMigrash;
+
+      // לא מסמנים dirty אוטומטית כאן (כדי שלא יהפוך הכל לכחול ישר),
+      // רק כשהמשתמש משנה בפועל.
+    });
+
+    markDirty();
+  }
+
+  // ON -> OFF: הדריסה תקרה רק ב-Save
+  if (was && !state.splitAddr) {
+    markDirty();
+  }
+
+  render();
 }
 
-function hasUnsavedChanges() {
-  // project split changes
-  if (state.splitName !== state.splitNamePersisted) return true;
-  if (state.splitAddr !== state.splitAddrPersisted) return true;
+/***********************
+ * Fill buttons
+ ***********************/
+function fillNamesFromProject() {
+  const projectName = safeStr(getProjectField(PROJECT_NAME_FIELD_API)).trim();
+  state.shelters.forEach((r) => {
+    if (r.pendingDelete) return;
+    r.fields[SHELTER_OWNER_NAME_API] = projectName;
+    r.dirtyFields.add(SHELTER_OWNER_NAME_API);
+  });
+  markDirty();
+  render();
+}
 
-  // row fields
-  for (const rec of state.shelters) {
-    const id = getShelterId(rec);
-    const orig = getOriginal(id);
-    if (!orig) continue;
+function fillAddrFromProject() {
+  const pStreet = safeStr(getProjectField(PROJECT_STREET_API));
+  const pNumber = safeStr(getProjectField(PROJECT_NUMBER_API));
+  const pGush = safeStr(getProjectField(PROJECT_GUSH_API));
+  const pHelka = safeStr(getProjectField(PROJECT_HELKA_API));
+  const pMigrash = safeStr(getProjectField(PROJECT_MIGRASH_API));
 
-    // Always-edit fields
-    if (!fieldsEqual(rec[SHELTER_REMARKS_API], orig[SHELTER_REMARKS_API]))
-      return true;
+  state.shelters.forEach((r) => {
+    if (r.pendingDelete) return;
+    r.fields[SHELTER_STREET_API] = pStreet;
+    r.fields[SHELTER_NUMBER_API] = pNumber;
+    r.fields[SHELTER_GUSH_API] = pGush;
+    r.fields[SHELTER_HELKA_API] = pHelka;
+    r.fields[SHELTER_MIGRASH_API] = pMigrash;
 
-    // Split-dependent fields (only meaningful when split ON)
-    if (state.splitName) {
-      if (
-        !fieldsEqual(rec[SHELTER_OWNER_NAME_API], orig[SHELTER_OWNER_NAME_API])
-      )
-        return true;
-    }
-    if (state.splitAddr) {
-      const addrFields = [
-        SHELTER_STREET_API,
-        SHELTER_NUMBER_API,
-        SHELTER_GUSH_API,
-        SHELTER_HELKA_API,
-        SHELTER_MIGRASH_API,
-      ];
-      for (const f of addrFields) {
-        if (!fieldsEqual(rec[f], orig[f])) return true;
+    r.dirtyFields.add(SHELTER_STREET_API);
+    r.dirtyFields.add(SHELTER_NUMBER_API);
+    r.dirtyFields.add(SHELTER_GUSH_API);
+    r.dirtyFields.add(SHELTER_HELKA_API);
+    r.dirtyFields.add(SHELTER_MIGRASH_API);
+  });
+
+  markDirty();
+  render();
+}
+
+/***********************
+ * CRUD (draft)
+ ***********************/
+function addRowDraft() {
+  state.shelters.unshift(createNewRow());
+  markDirty();
+  state.view = "list";
+  render();
+  setBanner("info", "נוסף ממד חדש (טיוטה). הוא ייווצר רק בעת שמירה.");
+}
+
+function deleteSelectedDraft() {
+  const selected = state.shelters.filter((r) => r.selected && !r.pendingDelete);
+  if (!selected.length) return;
+
+  confirmModal({
+    title: "מחיקת ממדים",
+    message: `בטוח למחוק ${selected.length} ממד(ים)?<br/><span style="color:#6b7280">המחיקה האמיתית תתבצע רק לאחר שמירה.</span>`,
+    confirmText: "כן, למחוק (טיוטה)",
+    cancelText: "ביטול",
+    variant: "danger",
+    onConfirm: () => {
+      selected.forEach((r) => {
+        r.pendingDelete = true;
+        r.selected = false;
+        if (!r.isNew) state.deleted.push(r);
+      });
+      markDirty();
+      render();
+      setBanner(
+        "warn",
+        `סומנו למחיקה ${selected.length} ממד(ים). אל תשכח לשמור כדי לבצע מחיקה בפועל.`,
+      );
+    },
+  });
+}
+
+/***********************
+ * Save (real)
+ ***********************/
+function buildProjectUpdatePayloadIfNeeded() {
+  const needs =
+    state.splitName !== state.originalSplitName ||
+    state.splitAddr !== state.originalSplitAddr;
+
+  if (!needs) return null;
+
+  return {
+    id: state.projectId,
+    [PROJECT_SPLIT_NAME_FIELD_API]: !!state.splitName,
+    [PROJECT_SPLIT_ADDR_FIELD_API]: !!state.splitAddr,
+  };
+}
+
+function buildShelterPayload(row) {
+  const apiData = { id: row.id };
+
+  // always allow updating these if dirty (or if forced by split off)
+  const setIfDirty = (fieldApi) => {
+    if (row.dirtyFields.has(fieldApi))
+      apiData[fieldApi] = safeStr(row.fields[fieldApi]);
+  };
+
+  setIfDirty(SHELTER_NAME_API);
+  setIfDirty(SHELTER_LOCATION_API);
+  setIfDirty(SHELTER_ENTRANCE_API);
+  setIfDirty(SHELTER_FLOOR_API);
+  setIfDirty(SHELTER_APARTMENT_API);
+  setIfDirty(SHELTER_REMARKS_API);
+
+  // splitName ON: update if dirty
+  if (state.splitName) {
+    setIfDirty(SHELTER_OWNER_NAME_API);
+  } else {
+    // splitName OFF: force owner name = project name
+    apiData[SHELTER_OWNER_NAME_API] = safeStr(
+      getProjectField(PROJECT_NAME_FIELD_API),
+    );
+  }
+
+  // splitAddr ON: update address fields only if dirty
+  if (state.splitAddr) {
+    setIfDirty(SHELTER_STREET_API);
+    setIfDirty(SHELTER_NUMBER_API);
+    setIfDirty(SHELTER_GUSH_API);
+    setIfDirty(SHELTER_HELKA_API);
+    setIfDirty(SHELTER_MIGRASH_API);
+  } else {
+    // splitAddr OFF: force address fields = project values
+    apiData[SHELTER_STREET_API] = safeStr(getProjectField(PROJECT_STREET_API));
+    apiData[SHELTER_NUMBER_API] = safeStr(getProjectField(PROJECT_NUMBER_API));
+    apiData[SHELTER_GUSH_API] = safeStr(getProjectField(PROJECT_GUSH_API));
+    apiData[SHELTER_HELKA_API] = safeStr(getProjectField(PROJECT_HELKA_API));
+    apiData[SHELTER_MIGRASH_API] = safeStr(
+      getProjectField(PROJECT_MIGRASH_API),
+    );
+  }
+
+  return apiData;
+}
+
+function buildShelterInsertPayload(row) {
+  const apiData = {};
+
+  // lookup to project
+  apiData[SHELTER_PROJECT_LOOKUP_API] = { id: state.projectId };
+
+  // required by your current validation
+  apiData[SHELTER_NAME_API] = safeStr(row.fields[SHELTER_NAME_API]);
+  apiData[SHELTER_FLOOR_API] = safeStr(row.fields[SHELTER_FLOOR_API]);
+
+  // optional
+  apiData[SHELTER_LOCATION_API] = safeStr(row.fields[SHELTER_LOCATION_API]);
+  apiData[SHELTER_ENTRANCE_API] = safeStr(row.fields[SHELTER_ENTRANCE_API]);
+  apiData[SHELTER_APARTMENT_API] = safeStr(row.fields[SHELTER_APARTMENT_API]);
+  apiData[SHELTER_REMARKS_API] = safeStr(row.fields[SHELTER_REMARKS_API]);
+
+  // split policy
+  if (state.splitName)
+    apiData[SHELTER_OWNER_NAME_API] = safeStr(
+      row.fields[SHELTER_OWNER_NAME_API],
+    );
+  else
+    apiData[SHELTER_OWNER_NAME_API] = safeStr(
+      getProjectField(PROJECT_NAME_FIELD_API),
+    );
+
+  if (state.splitAddr) {
+    apiData[SHELTER_STREET_API] = safeStr(row.fields[SHELTER_STREET_API]);
+    apiData[SHELTER_NUMBER_API] = safeStr(row.fields[SHELTER_NUMBER_API]);
+    apiData[SHELTER_GUSH_API] = safeStr(row.fields[SHELTER_GUSH_API]);
+    apiData[SHELTER_HELKA_API] = safeStr(row.fields[SHELTER_HELKA_API]);
+    apiData[SHELTER_MIGRASH_API] = safeStr(row.fields[SHELTER_MIGRASH_API]);
+  } else {
+    apiData[SHELTER_STREET_API] = safeStr(getProjectField(PROJECT_STREET_API));
+    apiData[SHELTER_NUMBER_API] = safeStr(getProjectField(PROJECT_NUMBER_API));
+    apiData[SHELTER_GUSH_API] = safeStr(getProjectField(PROJECT_GUSH_API));
+    apiData[SHELTER_HELKA_API] = safeStr(getProjectField(PROJECT_HELKA_API));
+    apiData[SHELTER_MIGRASH_API] = safeStr(
+      getProjectField(PROJECT_MIGRASH_API),
+    );
+  }
+
+  return apiData;
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function batchRun(items, batchSize, runner, onProgress) {
+  const batches = chunk(items, batchSize);
+  let done = 0;
+  const total = items.length;
+
+  for (const b of batches) {
+    const results = await Promise.allSettled(b.map((x) => runner(x)));
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      done += 1;
+      onProgress && onProgress(done, total);
+
+      if (r.status === "rejected") {
+        throw r.reason || new Error("Batch failed");
       }
     }
   }
-  return false;
+}
+
+async function saveAll() {
+  const problems = validateRows();
+  if (problems.length) {
+    const lines = problems
+      .map((p) => {
+        const n = safeStr(p.row.fields[SHELTER_NAME_API]).trim() || p.row.id;
+        return `• <b>${escapeHtml(n)}</b>: ${escapeHtml(p.issues.join(", "))}`;
+      })
+      .join("<br/>");
+
+    infoModal({
+      title: "לא ניתן לשמור",
+      html: `<div style="margin-bottom:8px;color:#b42318;font-weight:800;">יש ממדים לא חוקיים.</div><div>${lines}</div>`,
+      okText: "חזרה לעריכה",
+    });
+
+    render();
+    return;
+  }
+
+  const newRows = state.shelters.filter((r) => r.isNew && !r.pendingDelete);
+  const delRows = state.deleted.slice(); // existing only
+  const updRows = state.shelters.filter(
+    (r) =>
+      !r.isNew &&
+      !r.pendingDelete &&
+      (r.dirtyFields.size > 0 || !state.splitName || !state.splitAddr),
+  );
+
+  const projectUpd = buildProjectUpdatePayloadIfNeeded();
+
+  confirmModal({
+    title: "שמירה",
+    message: `בטוח לשמור?<br/><div style="margin-top:8px;color:#6b7280">
+      יצירה: <b>${newRows.length}</b> | עדכון: <b>${updRows.length}</b> | מחיקה: <b>${delRows.length}</b>
+    </div>`,
+    confirmText: "כן, לשמור",
+    cancelText: "ביטול",
+    variant: "primary",
+    onConfirm: async () => {
+      try {
+        setBanner("info", "שומר...");
+        resizeForUiState();
+
+        // Update Project flags (if needed)
+        if (projectUpd) {
+          await zohoUpdateRecord(PROJECTS_MODULE_API, projectUpd);
+        }
+
+        // Inserts
+        if (newRows.length) {
+          await batchRun(
+            newRows,
+            50,
+            async (row) => {
+              const apiData = buildShelterInsertPayload(row);
+              return zohoInsertRecord(SHELTERS_MODULE_API, apiData);
+            },
+            (d, t) => setBanner("info", `שומר... (יצירה ${d}/${t})`),
+          );
+        }
+
+        // Updates (only if something to update)
+        if (updRows.length) {
+          await batchRun(
+            updRows,
+            50,
+            async (row) => {
+              const apiData = buildShelterPayload(row);
+              return zohoUpdateRecord(SHELTERS_MODULE_API, apiData);
+            },
+            (d, t) => setBanner("info", `שומר... (עדכון ${d}/${t})`),
+          );
+        }
+
+        // Deletes
+        if (delRows.length) {
+          await batchRun(
+            delRows,
+            50,
+            async (row) => zohoDeleteRecord(SHELTERS_MODULE_API, row.id),
+            (d, t) => setBanner("info", `שומר... (מחיקה ${d}/${t})`),
+          );
+        }
+
+        setBanner("ok", "נשמר בהצלחה. סוגר...");
+        setDirty(false);
+
+        // close popup (button-invoked widget)
+        await tryCloseWidget();
+      } catch (err) {
+        setBanner(
+          "danger",
+          `שמירה נכשלה: ${safeStr(err && err.message ? err.message : err)}`,
+        );
+        render();
+      } finally {
+        resizeAfterRender();
+      }
+    },
+    onCancel: () => {
+      // stay on edit
+    },
+  });
+}
+
+async function tryCloseWidget() {
+  try {
+    if (
+      ZOHO &&
+      ZOHO.CRM &&
+      ZOHO.CRM.UI &&
+      ZOHO.CRM.UI.Popup &&
+      typeof ZOHO.CRM.UI.Popup.close === "function"
+    ) {
+      await ZOHO.CRM.UI.Popup.close();
+      return;
+    }
+  } catch (_) {}
+
+  try {
+    if (
+      ZOHO &&
+      ZOHO.embeddedApp &&
+      typeof ZOHO.embeddedApp.close === "function"
+    ) {
+      await ZOHO.embeddedApp.close();
+      return;
+    }
+  } catch (_) {}
+
+  // fallback: reload close
+  try {
+    if (
+      ZOHO &&
+      ZOHO.CRM &&
+      ZOHO.CRM.UI &&
+      ZOHO.CRM.UI.Popup &&
+      typeof ZOHO.CRM.UI.Popup.closeReload === "function"
+    ) {
+      await ZOHO.CRM.UI.Popup.closeReload();
+    }
+  } catch (_) {}
 }
 
 /***********************
  * Events
  ***********************/
-function onCellEdit(e) {
-  const id = e.target.getAttribute("data-id");
-  const field = e.target.getAttribute("data-field");
-  const rec = state.shelters.find((x) => getShelterId(x) === id);
-  if (!rec) return;
+el.bannerClose.addEventListener("click", () => clearBanner());
+el.modalX.addEventListener("click", () => closeModal());
+el.modalBackdrop.addEventListener("click", (e) => {
+  if (e.target === el.modalBackdrop) closeModal();
+});
 
-  rec[field] = e.target.value;
-  renderAll();
-  resizeAfterRender();
-}
-
-function onRowSelect(e) {
-  const id = e.target.getAttribute("data-id");
-  if (!id) return;
-
-  if (e.target.checked) state.selectedIds.add(id);
-  else state.selectedIds.delete(id);
-
-  renderAll();
-  resizeAfterRender();
-}
-
-async function onOpenRecord(e) {
-  const id = e.currentTarget.getAttribute("data-id");
-  if (!id) return;
-
-  try {
-    if (window.ZOHO?.CRM?.UI?.Record?.open) {
-      await ZOHO.CRM.UI.Record.open({
-        Entity: SHELTERS_MODULE_API,
-        RecordID: id,
-      });
-    }
-  } catch {
-    // ignore
+el.btnRefresh.addEventListener("click", () => {
+  if (state.isDirty) {
+    confirmModal({
+      title: "רענון",
+      message: "לרענן? שינויים שביצעת לא ישמרו.",
+      confirmText: "כן, לרענן",
+      cancelText: "ביטול",
+      variant: "primary",
+      onConfirm: async () => {
+        clearBanner();
+        await loadAll();
+      },
+    });
+  } else {
+    loadAll();
   }
-}
+});
 
-async function onToggleSplitName() {
-  if (!state.project) return;
-  const next = !!el.toggleSplitName.checked;
+el.btnAdd.addEventListener("click", () => addRowDraft());
 
-  state.splitName = next;
+el.btnDelete.addEventListener("click", () => deleteSelectedDraft());
 
-  // לפי דרישה: בהדלקה לעדכן מיד את הפרויקט
-  if (next && state.splitNamePersisted !== true) {
-    try {
-      showBanner("info", "מעדכן בפרויקט: פיצול שם = פעיל…");
-      await zohoUpdateRecord(PROJECTS_MODULE_API, state.projectId, {
-        [PROJECT_SPLIT_NAME_FIELD_API]: true,
-      });
-      state.splitNamePersisted = true;
-      state.project[PROJECT_SPLIT_NAME_FIELD_API] = true;
-      showBanner("ok", "פיצול שם הופעל בפרויקט.");
-    } catch (e) {
-      showBanner("err", `נכשל לעדכן פיצול שם בפרויקט: ${e.message || e}`);
-      // rollback UI toggle
-      state.splitName = state.splitNamePersisted;
-      el.toggleSplitName.checked = state.splitName;
-    }
-  }
+el.btnSave.addEventListener("click", () => {
+  if (el.btnSave.disabled) return;
+  saveAll();
+});
 
-  // בהדלקה: אם שדה שם ממד ריק -> למלא שם פרויקט (לוקאלי, נשמר ב-Save)
-  if (state.splitName) {
-    const pn = projectName();
-    for (const s of state.shelters) {
-      if (!norm(s[SHELTER_OWNER_NAME_API])) s[SHELTER_OWNER_NAME_API] = pn;
-    }
-  }
+el.toggleSplitName.addEventListener("change", (e) =>
+  onToggleSplitName(e.target.checked),
+);
+el.toggleSplitAddr.addEventListener("change", (e) =>
+  onToggleSplitAddr(e.target.checked),
+);
 
-  renderAll();
-  resizeAfterRender();
-}
+el.btnFillName.addEventListener("click", () => {
+  confirmModal({
+    title: "מילוי שמות",
+    message: "זה ידרוס את כל שמות הממדים. בטוח?",
+    confirmText: "כן, לדרוס",
+    cancelText: "ביטול",
+    variant: "danger",
+    onConfirm: () => fillNamesFromProject(),
+  });
+});
 
-async function onToggleSplitAddr() {
-  if (!state.project) return;
-  const next = !!el.toggleSplitAddr.checked;
+el.btnFillAddr.addEventListener("click", () => {
+  confirmModal({
+    title: "מילוי כתובות",
+    message: "זה ידרוס את כל כתובות הממדים (ללא עיר). בטוח?",
+    confirmText: "כן, לדרוס",
+    cancelText: "ביטול",
+    variant: "danger",
+    onConfirm: () => fillAddrFromProject(),
+  });
+});
 
-  state.splitAddr = next;
+// Delegated events for table (click to edit, selection, input changes)
+document.addEventListener("click", async (e) => {
+  const t = e.target;
 
-  // לפי דרישה: בהדלקה לעדכן מיד את הפרויקט
-  if (next && state.splitAddrPersisted !== true) {
-    try {
-      showBanner("info", "מעדכן בפרויקט: פיצול כתובת = פעיל…");
-      await zohoUpdateRecord(PROJECTS_MODULE_API, state.projectId, {
-        [PROJECT_SPLIT_ADDR_FIELD_API]: true,
-      });
-      state.splitAddrPersisted = true;
-      state.project[PROJECT_SPLIT_ADDR_FIELD_API] = true;
-      showBanner("ok", "פיצול כתובת הופעל בפרויקט.");
-    } catch (e) {
-      showBanner("err", `נכשל לעדכן פיצול כתובת בפרויקט: ${e.message || e}`);
-      // rollback
-      state.splitAddr = state.splitAddrPersisted;
-      el.toggleSplitAddr.checked = state.splitAddr;
-    }
-  }
-
-  // בהדלקה: אם שדה כתובת ריק -> למלא מערכי הפרויקט (לוקאלי, נשמר ב-Save)
-  if (state.splitAddr) {
-    for (const s of state.shelters) {
-      if (!norm(s[SHELTER_STREET_API]))
-        s[SHELTER_STREET_API] = projectField(PROJECT_STREET_API);
-      if (!norm(s[SHELTER_NUMBER_API]))
-        s[SHELTER_NUMBER_API] = projectField(PROJECT_NUMBER_API);
-      if (!norm(s[SHELTER_GUSH_API]))
-        s[SHELTER_GUSH_API] = projectField(PROJECT_GUSH_API);
-      if (!norm(s[SHELTER_HELKA_API]))
-        s[SHELTER_HELKA_API] = projectField(PROJECT_HELKA_API);
-      if (!norm(s[SHELTER_MIGRASH_API]))
-        s[SHELTER_MIGRASH_API] = projectField(PROJECT_MIGRASH_API);
-    }
-  }
-
-  renderAll();
-  resizeAfterRender();
-}
-
-async function onFillNames() {
-  if (!state.splitName) return;
-  const ok = window.confirm("זה ידרוס את כל שמות הממדים. בטוח?");
-  if (!ok) return;
-
-  const pn = projectName();
-  for (const s of state.shelters) s[SHELTER_OWNER_NAME_API] = pn;
-
-  showBanner("info", "עודכן לוקאלית. לחץ 'שמור שינויים' כדי לעדכן ב-CRM.");
-  renderAll();
-  resizeAfterRender();
-}
-
-async function onFillAddr() {
-  if (!state.splitAddr) return;
-  const ok = window.confirm("זה ידרוס את כל כתובות הממדים (ללא עיר). בטוח?");
-  if (!ok) return;
-
-  for (const s of state.shelters) {
-    s[SHELTER_STREET_API] = projectField(PROJECT_STREET_API);
-    s[SHELTER_NUMBER_API] = projectField(PROJECT_NUMBER_API);
-    s[SHELTER_GUSH_API] = projectField(PROJECT_GUSH_API);
-    s[SHELTER_HELKA_API] = projectField(PROJECT_HELKA_API);
-    s[SHELTER_MIGRASH_API] = projectField(PROJECT_MIGRASH_API);
-  }
-
-  showBanner("info", "עודכן לוקאלית. לחץ 'שמור שינויים' כדי לעדכן ב-CRM.");
-  renderAll();
-  resizeAfterRender();
-}
-
-/***********************
- * Save / Add / Delete / Refresh
- ***********************/
-function validateBeforeSave() {
-  const pn = projectName();
-  if (!pn) return "חסר שם לפרויקט (Name).";
-
-  // city only display - no validation needed
-
-  const pStreet = norm(projectField(PROJECT_STREET_API));
-  const pNum = norm(projectField(PROJECT_NUMBER_API));
-  const pGush = norm(projectField(PROJECT_GUSH_API));
-  const pHelka = norm(projectField(PROJECT_HELKA_API));
-  const pMigrash = norm(projectField(PROJECT_MIGRASH_API));
-
-  // When split address OFF, shelters will be forced to project address -> project must have min street+number
-  if (!state.splitAddr && (!pStreet || !pNum)) {
-    return "פיצול כתובת כבוי, אבל בפרויקט חסרים רחוב/מספר. או תמלא בפרויקט או תדליק פיצול כתובת ותמלא בממדים.";
-  }
-
-  for (const s of state.shelters) {
-    // owner name must exist always
-    const owner = state.splitName ? norm(s[SHELTER_OWNER_NAME_API]) : pn;
-    if (!owner) return `יש ממד בלי שם (shelterOwnerName).`;
-
-    // effective address (no city)
-    const street = state.splitAddr ? norm(s[SHELTER_STREET_API]) : pStreet;
-    const num = state.splitAddr ? norm(s[SHELTER_NUMBER_API]) : pNum;
-    if (!street || !num) return `יש ממד בלי רחוב/מספר.`;
-
-    // If project has values, shelter must have them (effective)
-    const gush = state.splitAddr ? norm(s[SHELTER_GUSH_API]) : pGush;
-    const helka = state.splitAddr ? norm(s[SHELTER_HELKA_API]) : pHelka;
-    const migrash = state.splitAddr ? norm(s[SHELTER_MIGRASH_API]) : pMigrash;
-
-    if (pGush && !gush) return `בפרויקט יש גוש, אבל באחד הממדים חסר גוש.`;
-    if (pHelka && !helka) return `בפרויקט יש חלקה, אבל באחד הממדים חסרה חלקה.`;
-    if (pMigrash && !migrash)
-      return `בפרויקט יש מגרש, אבל באחד הממדים חסר מגרש.`;
-  }
-
-  return null;
-}
-
-async function runBatched(items, batchSize, worker, progressLabel) {
-  let done = 0;
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-
-    // sequential per batch to be safe with rate limits
-    for (const it of batch) {
-      await worker(it);
-      done += 1;
-      showBanner("info", `${progressLabel} ${done}/${items.length}`);
-    }
-  }
-}
-
-async function onSave() {
-  if (state.saving) return;
-
-  const err = validateBeforeSave();
-  if (err) {
-    showBanner("err", err);
+  // selection checkbox
+  if (t && t.matches && t.matches('input[type="checkbox"][data-select="1"]')) {
+    const rowId = t.getAttribute("data-row");
+    const row = findRow(rowId);
+    if (!row) return;
+    row.selected = !!t.checked;
+    render();
     return;
   }
 
-  const pn = projectName();
+  // click-to-edit on cell-text
+  if (t && t.getAttribute) {
+    const activate = t.getAttribute("data-activate");
+    if (activate === "1") {
+      const rowId = t.getAttribute("data-row");
+      const field = t.getAttribute("data-field");
+      const row = findRow(rowId);
+      if (!row) return;
+      if (!isFieldEditable(field)) return;
 
-  state.saving = true;
-  el.btnSave.disabled = true;
-
-  try {
-    // 1) update project split flags if needed (OFF is saved here)
-    const projUpdates = {};
-    if (state.splitName !== state.splitNamePersisted)
-      projUpdates[PROJECT_SPLIT_NAME_FIELD_API] = state.splitName;
-    if (state.splitAddr !== state.splitAddrPersisted)
-      projUpdates[PROJECT_SPLIT_ADDR_FIELD_API] = state.splitAddr;
-
-    if (Object.keys(projUpdates).length) {
-      showBanner("info", "שומר שינויים בפרויקט…");
-      await zohoUpdateRecord(PROJECTS_MODULE_API, state.projectId, projUpdates);
-      Object.assign(state.project, projUpdates);
-      if (projUpdates[PROJECT_SPLIT_NAME_FIELD_API] !== undefined)
-        state.splitNamePersisted = !!projUpdates[PROJECT_SPLIT_NAME_FIELD_API];
-      if (projUpdates[PROJECT_SPLIT_ADDR_FIELD_API] !== undefined)
-        state.splitAddrPersisted = !!projUpdates[PROJECT_SPLIT_ADDR_FIELD_API];
-    }
-
-    // 2) build shelter updates (only changed rows), BUT:
-    //    אם Split OFF -> דריסה לערכי הפרויקט בעת Save (לפי דרישה)
-    const pStreet = projectField(PROJECT_STREET_API);
-    const pNum = projectField(PROJECT_NUMBER_API);
-    const pGush = projectField(PROJECT_GUSH_API);
-    const pHelka = projectField(PROJECT_HELKA_API);
-    const pMigrash = projectField(PROJECT_MIGRASH_API);
-
-    const updates = [];
-    for (const s of state.shelters) {
-      const id = getShelterId(s);
-      const orig = getOriginal(id);
-      if (!orig) continue;
-
-      const patch = {};
-      // Always-edit fields
-      if (!fieldsEqual(s[SHELTER_REMARKS_API], orig[SHELTER_REMARKS_API]))
-        patch[SHELTER_REMARKS_API] = s[SHELTER_REMARKS_API];
-
-      // Name
-      if (!state.splitName) {
-        // force
-        if (norm(s[SHELTER_OWNER_NAME_API]) !== norm(pn))
-          patch[SHELTER_OWNER_NAME_API] = pn;
-      } else {
-        if (
-          !fieldsEqual(s[SHELTER_OWNER_NAME_API], orig[SHELTER_OWNER_NAME_API])
-        )
-          patch[SHELTER_OWNER_NAME_API] = s[SHELTER_OWNER_NAME_API];
-      }
-
-      // Address
-      if (!state.splitAddr) {
-        // force
-        if (norm(s[SHELTER_STREET_API]) !== norm(pStreet))
-          patch[SHELTER_STREET_API] = pStreet;
-        if (norm(s[SHELTER_NUMBER_API]) !== norm(pNum))
-          patch[SHELTER_NUMBER_API] = pNum;
-        if (norm(s[SHELTER_GUSH_API]) !== norm(pGush))
-          patch[SHELTER_GUSH_API] = pGush;
-        if (norm(s[SHELTER_HELKA_API]) !== norm(pHelka))
-          patch[SHELTER_HELKA_API] = pHelka;
-        if (norm(s[SHELTER_MIGRASH_API]) !== norm(pMigrash))
-          patch[SHELTER_MIGRASH_API] = pMigrash;
-      } else {
-        const addrFields = [
-          SHELTER_STREET_API,
-          SHELTER_NUMBER_API,
-          SHELTER_GUSH_API,
-          SHELTER_HELKA_API,
-          SHELTER_MIGRASH_API,
-        ];
-        for (const f of addrFields) {
-          if (!fieldsEqual(s[f], orig[f])) patch[f] = s[f];
-        }
-      }
-
-      if (Object.keys(patch).length) {
-        updates.push({ id, patch });
-      }
-    }
-
-    if (!updates.length) {
-      showBanner("ok", "אין שינויים לשמירה.");
-      state.saving = false;
-      renderAll();
+      state.activeCell = { rowId, field };
+      render();
       return;
     }
-
-    showBanner("info", `שומר ממדים… 0/${updates.length}`);
-
-    await runBatched(
-      updates,
-      50,
-      async (u) => {
-        await zohoUpdateRecord(SHELTERS_MODULE_API, u.id, u.patch);
-      },
-      "Saving",
-    );
-
-    showBanner("ok", "נשמר בהצלחה.");
-
-    // reload fresh to sync originals
-    await loadAll();
-  } catch (e) {
-    showBanner("err", `נכשל לשמור: ${e.message || e}`);
-  } finally {
-    state.saving = false;
-    renderAll();
-    resizeAfterRender();
   }
-}
+});
 
-async function onAdd() {
-  if (state.saving) return;
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (!(t && t.matches && t.matches("input.z-input[data-row][data-field]")))
+    return;
 
-  const pn = projectName();
-  const fields = {
-    [SHELTER_PROJECT_LOOKUP_API]: { id: state.projectId },
-    [SHELTER_OWNER_NAME_API]: pn,
-    [SHELTER_STREET_API]: projectField(PROJECT_STREET_API),
-    [SHELTER_NUMBER_API]: projectField(PROJECT_NUMBER_API),
-    [SHELTER_GUSH_API]: projectField(PROJECT_GUSH_API),
-    [SHELTER_HELKA_API]: projectField(PROJECT_HELKA_API),
-    [SHELTER_MIGRASH_API]: projectField(PROJECT_MIGRASH_API),
-  };
+  const rowId = t.getAttribute("data-row");
+  const field = t.getAttribute("data-field");
+  const row = findRow(rowId);
+  if (!row) return;
 
-  try {
-    showBanner("info", "יוצר ממד חדש…");
-    const res = await zohoInsertRecord(SHELTERS_MODULE_API, fields);
-    const newId = res?.data?.[0]?.details?.id;
-    if (!newId) throw new Error("Insert success but no id returned");
+  row.fields[field] = t.value;
+  row.dirtyFields.add(field);
+  markDirty();
+});
 
-    // fetch full record and add
-    const rec = await zohoGetRecord(SHELTERS_MODULE_API, newId);
-    state.shelters.unshift(rec);
-    state.originalById.set(newId, JSON.parse(JSON.stringify(rec)));
+document.addEventListener("focusout", (e) => {
+  const t = e.target;
+  if (!(t && t.matches && t.matches("input.z-input[data-row][data-field]")))
+    return;
 
-    showBanner("ok", "נוצר ממד חדש.");
-    renderAll();
-    el.grid.style.display = "table";
-    el.empty.style.display = "none";
-    resizeAfterRender();
-  } catch (e) {
-    showBanner("err", `נכשל ליצור ממד: ${e.message || e}`);
-  }
-}
-
-async function onDeleteSelected() {
-  if (!state.selectedIds.size) return;
-  const ok = window.confirm(`למחוק ${state.selectedIds.size} ממדים?`);
-  if (!ok) return;
-
-  const ids = Array.from(state.selectedIds);
-
-  try {
-    showBanner("info", `מוחק… 0/${ids.length}`);
-    await runBatched(
-      ids,
-      50,
-      async (id) => {
-        await zohoDeleteRecord(SHELTERS_MODULE_API, id);
-      },
-      "Deleting",
-    );
-
-    // remove locally
-    state.shelters = state.shelters.filter(
-      (s) => !state.selectedIds.has(getShelterId(s)),
-    );
-    for (const id of ids) state.originalById.delete(id);
-
-    state.selectedIds = new Set();
-    showBanner("ok", "נמחק בהצלחה.");
-    renderAll();
-
-    if (state.shelters.length === 0) {
-      el.grid.style.display = "none";
-      el.empty.style.display = "block";
+  const rowId = t.getAttribute("data-row");
+  const field = t.getAttribute("data-field");
+  if (
+    state.activeCell &&
+    state.activeCell.rowId === rowId &&
+    state.activeCell.field === field
+  ) {
+    // אם השדה לא dirty ולא חדש, חוזר לתצוגה רגילה
+    const row = findRow(rowId);
+    if (row && !row.isNew && !row.dirtyFields.has(field)) {
+      state.activeCell = null;
+      render();
+    } else {
+      // להשאיר כחול אם dirty/new
+      state.activeCell = null;
     }
-    resizeAfterRender();
-  } catch (e) {
-    showBanner("err", `נכשל למחוק: ${e.message || e}`);
   }
-}
-
-async function onRefresh() {
-  if (!state.projectId) return;
-  clearBanner();
-  await loadAll();
-}
-
-/***********************
- * Bind UI
- ***********************/
-function bindUI() {
-  el.toggleSplitName.addEventListener("change", onToggleSplitName);
-  el.toggleSplitAddr.addEventListener("change", onToggleSplitAddr);
-
-  el.btnFillNames.addEventListener("click", onFillNames);
-  el.btnFillAddr.addEventListener("click", onFillAddr);
-
-  el.btnSave.addEventListener("click", onSave);
-  el.btnAdd.addEventListener("click", onAdd);
-  el.btnDelete.addEventListener("click", onDeleteSelected);
-  el.btnRefresh.addEventListener("click", onRefresh);
-
-  el.chkAll.addEventListener("change", () => {
-    state.selectedIds = new Set();
-    if (el.chkAll.checked) {
-      for (const s of state.shelters) state.selectedIds.add(getShelterId(s));
-    }
-    renderAll();
-    resizeAfterRender();
-  });
-}
+});
 
 /***********************
  * Init
  ***********************/
-async function initZoho() {
-  // URL param fallback (works even if PageLoad never arrives)
-  const urlId = getRecordIdFromUrl();
-  if (urlId) startWithProjectId(urlId, "url");
+function showMissingIdError() {
+  state.view = "error";
+  setBanner("danger", "לא התקבל מזהה פרויקט (recordId) מהכפתור");
+  render();
+  resizeForUiState();
+}
 
-  // If SDK not available, show clear error (also prevents Parentwindow confusion)
-  if (!state.insideZoho || !window.ZOHO?.embeddedApp) {
-    showBanner(
-      "err",
-      "נראה שהווידג׳ט נפתח מחוץ ל-Zoho CRM (SDK לא זמין). חייב לפתוח דרך כפתור 'Open a Widget' בתוך ה-Detail View.",
-    );
-    resizeFor("list");
+function startLoadOnce() {
+  if (state.loadStarted) return;
+  state.loadStarted = true;
+
+  resizeOpen();
+  loadAll();
+}
+
+(function init() {
+  // Basic SDK check
+  if (!window.ZOHO || !ZOHO.embeddedApp) {
+    setBanner("danger", "Zoho SDK לא נטען. הפעל את הווידג׳ט מתוך Zoho CRM.");
+    state.view = "error";
+    render();
     return;
   }
 
-  // Subscribe PageLoad BEFORE init (Zoho doc pattern)
+  // Listen PageLoad (button / related list / detail view)
   ZOHO.embeddedApp.on("PageLoad", function (data) {
-    const pid = extractEntityIdFromPageLoad(data);
-    if (pid) startWithProjectId(pid, "pageload");
+    const id = normalizeIdFromEntityId(data && data.EntityId);
+    if (id && !state.projectId) {
+      state.projectId = id;
+      startLoadOnce();
+    }
   });
 
-  try {
-    // init handshake
-    await ZOHO.embeddedApp.init();
+  ZOHO.embeddedApp
+    .init()
+    .then(() => {
+      // URL param support
+      const urlId = getUrlRecordId();
+      if (urlId && !state.projectId) {
+        state.projectId = urlId;
+      }
 
-    // If neither URL nor PageLoad gave an id after a short delay -> show error
-    setTimeout(() => {
-      if (!state.started) showNoIdError();
-    }, 1200);
-  } catch (e) {
-    // Usually happens when opened outside iframe => Parentwindow reference not found
-    showBanner(
-      "err",
-      "Parentwindow reference not found: הווידג׳ט חייב להיפתח מתוך Zoho CRM (לא לפתוח את ה-URL ישירות בדפדפן).",
-    );
-    resizeFor("list");
-  }
-}
+      // If we already have ID, load now
+      if (state.projectId) {
+        startLoadOnce();
+        return;
+      }
 
-document.addEventListener("DOMContentLoaded", () => {
-  bindUI();
+      // Wait a bit for PageLoad (some contexts fire slightly later)
+      setTimeout(() => {
+        if (!state.projectId) showMissingIdError();
+      }, 900);
 
-  // Resize in open
-  resize(1000);
-  resizeFor("loading");
-
-  initZoho();
-});
+      resizeOpen();
+    })
+    .catch(() => {
+      setBanner("danger", "שגיאת init מול Zoho. נסה לרענן את הדף.");
+      state.view = "error";
+      render();
+    });
+})();

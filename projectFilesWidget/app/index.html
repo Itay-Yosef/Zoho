@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>מסמכים מקושרים</title>
 
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
     <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
 
     <style>
@@ -53,16 +51,13 @@
         top: 0;
         z-index: 1000;
         background: #ffffff;
-
         padding: 0;
         min-height: 46px;
-
         display: flex;
         align-items: center;
         gap: 12px;
-
         direction: rtl;
-        border-bottom: none;
+        border-bottom: 1px solid #e9ebee;
       }
 
       .right-block {
@@ -80,10 +75,8 @@
         direction: rtl;
         flex-wrap: wrap;
         min-width: 0;
-
         min-height: 28px;
         line-height: 28px;
-
         font-size: 18px;
         font-weight: 800;
       }
@@ -203,7 +196,6 @@
         top: 0;
         z-index: 50;
         background: #ffffff;
-
         padding: 10px 12px;
         font-weight: 800;
         color: #111;
@@ -323,6 +315,48 @@
         direction: rtl;
         align-items: center;
         gap: 10px;
+      }
+
+      /* ===== Mobile responsive ===== */
+      @media (max-width: 640px) {
+        .breadcrumbs {
+          font-size: 16px;
+        }
+        .btn {
+          padding: 7px 10px;
+          border-radius: 10px;
+          font-size: 13px;
+        }
+        table {
+          min-width: 0;
+        }
+        thead {
+          display: none;
+        }
+        tbody tr {
+          display: block;
+          border-bottom: 1px solid #e9ebee;
+        }
+        tbody td {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: none;
+          padding: 10px 12px;
+        }
+        tbody td::before {
+          content: attr(data-label);
+          color: #6b7280;
+          font-weight: 800;
+          flex: 0 0 auto;
+        }
+        tbody td[data-label="שם"]::before {
+          display: none;
+        }
+        .file-name {
+          color: #0b66c3;
+        }
       }
     </style>
   </head>
